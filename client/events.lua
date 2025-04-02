@@ -1,5 +1,15 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
+-- Add SafePlayerPedId at the top of the file
+local function SafePlayerPedId()
+    local ped = PlayerPedId()
+    if not ped or ped == 0 then
+        Wait(100)  -- Wait a bit and try again
+        ped = PlayerPedId()
+    end
+    return ped
+end
+
 -- Listen for outfit application event from server
 RegisterNetEvent('vein-clothing:client:applyOutfit', function(outfitItems)
     if not outfitItems or #outfitItems == 0 then return end
@@ -14,9 +24,9 @@ RegisterNetEvent('vein-clothing:client:applyOutfit', function(outfitItems)
     for _, item in ipairs(outfitItems) do
         -- Set outfit piece based on component type
         if item.event == "vein-clothing:client:wearItem" then
-            SetPedComponentVariation(PlayerPedId(), item.component, item.drawable, item.texture, 0)
+            SetPedComponentVariation(SafePlayerPedId(), item.component, item.drawable, item.texture, 0)
         elseif item.event == "vein-clothing:client:wearProp" then
-            SetPedPropIndex(PlayerPedId(), item.component, item.drawable, item.texture, true)
+            SetPedPropIndex(SafePlayerPedId(), item.component, item.drawable, item.texture, true)
         end
         
         -- Track in current outfit
@@ -39,25 +49,25 @@ end)
 -- Reset player appearance to default (used when applying full outfits)
 function ResetPedComponents()
     -- Reset clothing components
-    SetPedComponentVariation(PlayerPedId(), 0, 0, 0, 0)  -- Face
-    SetPedComponentVariation(PlayerPedId(), 1, 0, 0, 0)  -- Mask
-    SetPedComponentVariation(PlayerPedId(), 2, 0, 0, 0)  -- Hair
-    SetPedComponentVariation(PlayerPedId(), 3, 0, 0, 0)  -- Torso
-    SetPedComponentVariation(PlayerPedId(), 4, 0, 0, 0)  -- Pants
-    SetPedComponentVariation(PlayerPedId(), 5, 0, 0, 0)  -- Parachute / Bag
-    SetPedComponentVariation(PlayerPedId(), 6, 0, 0, 0)  -- Shoes
-    SetPedComponentVariation(PlayerPedId(), 7, 0, 0, 0)  -- Accessories
-    SetPedComponentVariation(PlayerPedId(), 8, 0, 0, 0)  -- Undershirt
-    SetPedComponentVariation(PlayerPedId(), 9, 0, 0, 0)  -- Body Armor
-    SetPedComponentVariation(PlayerPedId(), 10, 0, 0, 0) -- Decals
-    SetPedComponentVariation(PlayerPedId(), 11, 0, 0, 0) -- Jacket
+    SetPedComponentVariation(SafePlayerPedId(), 0, 0, 0, 0)  -- Face
+    SetPedComponentVariation(SafePlayerPedId(), 1, 0, 0, 0)  -- Mask
+    SetPedComponentVariation(SafePlayerPedId(), 2, 0, 0, 0)  -- Hair
+    SetPedComponentVariation(SafePlayerPedId(), 3, 0, 0, 0)  -- Torso
+    SetPedComponentVariation(SafePlayerPedId(), 4, 0, 0, 0)  -- Pants
+    SetPedComponentVariation(SafePlayerPedId(), 5, 0, 0, 0)  -- Parachute / Bag
+    SetPedComponentVariation(SafePlayerPedId(), 6, 0, 0, 0)  -- Shoes
+    SetPedComponentVariation(SafePlayerPedId(), 7, 0, 0, 0)  -- Accessories
+    SetPedComponentVariation(SafePlayerPedId(), 8, 0, 0, 0)  -- Undershirt
+    SetPedComponentVariation(SafePlayerPedId(), 9, 0, 0, 0)  -- Body Armor
+    SetPedComponentVariation(SafePlayerPedId(), 10, 0, 0, 0) -- Decals
+    SetPedComponentVariation(SafePlayerPedId(), 11, 0, 0, 0) -- Jacket
     
     -- Reset prop components
-    ClearPedProp(PlayerPedId(), 0) -- Hat
-    ClearPedProp(PlayerPedId(), 1) -- Glasses
-    ClearPedProp(PlayerPedId(), 2) -- Ear accessories
-    ClearPedProp(PlayerPedId(), 6) -- Watch
-    ClearPedProp(PlayerPedId(), 7) -- Bracelet
+    ClearPedProp(SafePlayerPedId(), 0) -- Hat
+    ClearPedProp(SafePlayerPedId(), 1) -- Glasses
+    ClearPedProp(SafePlayerPedId(), 2) -- Ear accessories
+    ClearPedProp(SafePlayerPedId(), 6) -- Watch
+    ClearPedProp(SafePlayerPedId(), 7) -- Bracelet
 end
 
 -- Automatically re-apply current outfit after player model changes
@@ -112,9 +122,9 @@ exports('previewClothing', function(itemName, variation)
     
     -- Apply the clothing item to player
     if item.client.event == "vein-clothing:client:wearItem" then
-        SetPedComponentVariation(PlayerPedId(), component, drawable, texture, 0)
+        SetPedComponentVariation(SafePlayerPedId(), component, drawable, texture, 0)
     elseif item.client.event == "vein-clothing:client:wearProp" then
-        SetPedPropIndex(PlayerPedId(), component, drawable, texture, true)
+        SetPedPropIndex(SafePlayerPedId(), component, drawable, texture, true)
     end
     
     if Config.Notifications.Enable then
@@ -136,9 +146,9 @@ RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
             -- Apply each currently worn item
             for _, item in ipairs(clothingItems) do
                 if item.event == "vein-clothing:client:wearItem" then
-                    SetPedComponentVariation(PlayerPedId(), item.component, item.drawable, item.texture, 0)
+                    SetPedComponentVariation(SafePlayerPedId(), item.component, item.drawable, item.texture, 0)
                 elseif item.event == "vein-clothing:client:wearProp" then
-                    SetPedPropIndex(PlayerPedId(), item.component, item.drawable, item.texture, true)
+                    SetPedPropIndex(SafePlayerPedId(), item.component, item.drawable, item.texture, true)
                 end
                 
                 -- Track in current outfit
@@ -174,9 +184,9 @@ RegisterNetEvent('inventory:client:ItemBox', function(itemData, type)
             if outfitItem.name == itemData.name then
                 -- Remove from player model
                 if itemData.event == "vein-clothing:client:wearItem" then
-                    SetPedComponentVariation(PlayerPedId(), component, 0, 0, 0)
+                    SetPedComponentVariation(SafePlayerPedId(), component, 0, 0, 0)
                 elseif itemData.event == "vein-clothing:client:wearProp" then
-                    ClearPedProp(PlayerPedId(), component)
+                    ClearPedProp(SafePlayerPedId(), component)
                 end
                 
                 -- Remove from tracked outfit

@@ -1,5 +1,15 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
+-- Add SafePlayerPedId at the top of the file
+local function SafePlayerPedId()
+    local ped = PlayerPedId()
+    if not ped or ped == 0 then
+        Wait(100)  -- Wait a bit and try again
+        ped = PlayerPedId()
+    end
+    return ped
+end
+
 -- NUI callback to check if an item is being worn
 RegisterNUICallback('checkIfWorn', function(data, cb)
     local itemName = data.item
@@ -185,41 +195,49 @@ end)
 -- NUI callback for getting nearby players
 RegisterNUICallback('getNearbyPlayers', function(data, cb)
     local nearbyPlayers = {}
-    local playerPed = PlayerPedId()
+    local playerPed = SafePlayerPedId()
     local playerCoords = GetEntityCoords(playerPed)
     
     -- Get list of all players
     local players = QBCore.Functions.GetPlayers()
     
+    -- Check if we actually got valid players
+    if not players or #players == 0 then
+        cb({players = {}})
+        return
+    end
+    
     for _, playerId in ipairs(players) do
         -- Don't include self
         if playerId ~= PlayerId() then
             local targetPed = GetPlayerPed(playerId)
-            local targetCoords = GetEntityCoords(targetPed)
-            local distance = #(playerCoords - targetCoords)
-            
-            -- Only include players within 3 meters
-            if distance <= 3.0 then
-                local targetServerId = GetPlayerServerId(playerId)
+            if DoesEntityExist(targetPed) then
+                local targetCoords = GetEntityCoords(targetPed)
+                local distance = #(playerCoords - targetCoords)
                 
-                QBCore.Functions.TriggerCallback('vein-clothing:server:getPlayerName', function(name)
-                    table.insert(nearbyPlayers, {
-                        id = targetServerId,
-                        name = name,
-                        distance = math.floor(distance * 10) / 10
-                    })
+                -- Only include players within 3 meters
+                if distance <= 3.0 then
+                    local targetServerId = GetPlayerServerId(playerId)
                     
-                    -- Send the callback when we've processed all nearby players
-                    if #nearbyPlayers == #players - 1 then
-                        cb({players = nearbyPlayers})
-                    end
-                end, targetServerId)
+                    QBCore.Functions.TriggerCallback('vein-clothing:server:getPlayerName', function(name)
+                        table.insert(nearbyPlayers, {
+                            id = targetServerId,
+                            name = name,
+                            distance = math.floor(distance * 10) / 10
+                        })
+                        
+                        -- Send the callback when we've processed all nearby players
+                        if #nearbyPlayers == #players - 1 then
+                            cb({players = nearbyPlayers})
+                        end
+                    end, targetServerId)
+                end
             end
         end
     end
     
-    -- If no nearby players found
-    if #players <= 1 then
+    -- If no nearby players found or all checks failed
+    if #nearbyPlayers == 0 then
         cb({players = {}})
     end
 end)
@@ -267,23 +285,15 @@ RegisterNUICallback('rotatePreview', function(data, cb)
     local direction = data.direction or "right"
     local amount = data.amount or 45.0
     
-    if not previewingClothes or not previewCam then
-        cb({success = false, message = "Not in preview mode"})
-        return
+    local ped = SafePlayerPedId()
+    
+    if direction == "right" then
+        SetEntityHeading(ped, GetEntityHeading(ped) - amount)
+    else
+        SetEntityHeading(ped, GetEntityHeading(ped) + amount)
     end
     
-    local playerPed = PlayerPedId()
-    local currentHeading = GetEntityHeading(playerPed)
-    local newHeading = currentHeading
-    
-    if direction == "left" then
-        newHeading = currentHeading + amount
-    elseif direction == "right" then
-        newHeading = currentHeading - amount
-    end
-    
-    SetEntityHeading(playerPed, newHeading)
-    cb({success = true, heading = newHeading})
+    cb({success = true})
 end)
 
 function StartPreviewCam()

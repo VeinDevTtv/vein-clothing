@@ -45,6 +45,16 @@ function GetClothingConfig(itemName)
     return ClothingConfig[itemName] or nil
 end
 
+-- Add this safety function near the top of the file
+local function SafePlayerPedId()
+    local ped = PlayerPedId()
+    if not ped or ped == 0 then
+        Wait(100)  -- Wait a bit and try again
+        ped = PlayerPedId()
+    end
+    return ped
+end
+
 -- Initialize player data
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     PlayerData = QBCore.Functions.GetPlayerData()
@@ -160,7 +170,7 @@ CreateThread(function()
     
     while true do
         local sleep = 1000
-        local pos = GetEntityCoords(PlayerPedId())
+        local pos = GetEntityCoords(SafePlayerPedId())
         isInsideStore = false
         
         for storeName, storeData in pairs(Config.Stores) do
@@ -285,7 +295,7 @@ end
 
 -- Get player gender
 function GetPlayerGender()
-    local model = GetEntityModel(PlayerPedId())
+    local model = GetEntityModel(SafePlayerPedId())
     
     if model == GetHashKey("mp_f_freemode_01") then
         return "female"
@@ -324,10 +334,10 @@ RegisterNUICallback('previewItem', function(data, cb)
     -- Apply clothing to player ped
     if item.client.event == "vein-clothing:client:wearItem" then
         -- Component-based clothing
-        SetPedComponentVariation(PlayerPedId(), component, drawable, texture, 0)
+        SetPedComponentVariation(SafePlayerPedId(), component, drawable, texture, 0)
     elseif item.client.event == "vein-clothing:client:wearProp" then
         -- Prop-based item (hats, glasses, etc)
-        SetPedPropIndex(PlayerPedId(), component, drawable, texture, true)
+        SetPedPropIndex(SafePlayerPedId(), component, drawable, texture, true)
     end
     
     cb({success = true})
@@ -429,7 +439,7 @@ local function HandleClothingItem(itemData)
         end
         
         -- Apply the prop
-        SetPedPropIndex(PlayerPedId(), propId, config.drawable, config.texture, true)
+        SetPedPropIndex(SafePlayerPedId(), propId, config.drawable, config.texture, true)
     else
         -- Handle regular clothing components
         if config.isAddon then
@@ -443,10 +453,10 @@ local function HandleClothingItem(itemData)
             end
             
             -- Apply addon clothing
-            SetPedComponentVariation(PlayerPedId(), componentId, config.drawable, config.texture, 0)
+            SetPedComponentVariation(SafePlayerPedId(), componentId, config.drawable, config.texture, 0)
         else
             -- Handle default GTA clothing
-            SetPedComponentVariation(PlayerPedId(), componentId, config.drawable, config.texture, 0)
+            SetPedComponentVariation(SafePlayerPedId(), componentId, config.drawable, config.texture, 0)
         end
     end
     
@@ -580,14 +590,14 @@ RegisterNetEvent('vein-clothing:client:wearProp', function(itemData)
     -- Check if removing or wearing
     if currentOutfit[component] and currentOutfit[component].name == itemData.name then
         -- Remove prop
-        ClearPedProp(PlayerPedId(), component)
+        ClearPedProp(SafePlayerPedId(), component)
         currentOutfit[component] = nil
         
         -- Degrade condition slightly when removing
         TriggerServerEvent('vein-clothing:server:degradeClothing', itemData.name, 0.1)
     else
         -- Wear prop
-        SetPedPropIndex(PlayerPedId(), component, drawable, texture, true)
+        SetPedPropIndex(SafePlayerPedId(), component, drawable, texture, true)
         
         -- Update current outfit
         currentOutfit[component] = {
@@ -727,7 +737,7 @@ RegisterCommand(Config.OutfitCommand, function(source, args)
 end, false)
 
 RegisterCommand('washclothes', function()
-    local playerCoords = GetEntityCoords(PlayerPedId())
+    local playerCoords = GetEntityCoords(SafePlayerPedId())
     local nearLaundromat = false
     
     for _, location in ipairs(Config.Laundromats) do
@@ -745,7 +755,7 @@ RegisterCommand('washclothes', function()
 end, false)
 
 RegisterCommand('repairclothes', function()
-    local playerCoords = GetEntityCoords(PlayerPedId())
+    local playerCoords = GetEntityCoords(SafePlayerPedId())
     local nearTailor = false
     
     for _, location in ipairs(Config.Tailors) do
@@ -1041,9 +1051,9 @@ function RemoveClothing(itemName)
     
     -- Reset the specific component
     if componentInfo.prop then
-        ClearPedProp(PlayerPedId(), componentInfo.component)
+        ClearPedProp(SafePlayerPedId(), componentInfo.component)
     else
-        SetPedComponentVariation(PlayerPedId(), componentInfo.component, 0, 0, 2)
+        SetPedComponentVariation(SafePlayerPedId(), componentInfo.component, 0, 0, 2)
     end
     
     return true
@@ -1073,7 +1083,7 @@ function ApplyClothing(itemName, variation)
     -- Apply the clothing item
     if componentInfo.prop then
         SetPedPropIndex(
-            PlayerPedId(),
+            SafePlayerPedId(),
             componentInfo.component,
             selectedVariation.drawable or 0,
             selectedVariation.texture or 0,
@@ -1081,7 +1091,7 @@ function ApplyClothing(itemName, variation)
         )
     else
         SetPedComponentVariation(
-            PlayerPedId(),
+            SafePlayerPedId(),
             componentInfo.component,
             selectedVariation.drawable or 0,
             selectedVariation.texture or 0,
@@ -1094,7 +1104,7 @@ end
 
 -- Reset player appearance to default
 function ResetAppearance()
-    local playerPed = PlayerPedId()
+    local playerPed = SafePlayerPedId()
     
     -- Clear all props
     ClearAllPedProps(playerPed)
@@ -1159,7 +1169,7 @@ end
 
 -- Start camera for clothing preview
 function StartPreviewCamera()
-    local playerPed = PlayerPedId()
+    local playerPed = SafePlayerPedId()
     local coords = GetEntityCoords(playerPed)
     
     -- Create a camera in front of the player

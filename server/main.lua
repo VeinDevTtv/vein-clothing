@@ -21,11 +21,14 @@ function SetupDatabase()
         -- Check if the columns exist
         MySQL.Async.fetchAll('SHOW COLUMNS FROM player_outfits', {}, function(columns)
             local hasOutfit = false
+            local hasIsDefault = false
             
             for i=1, #columns do
                 if columns[i].Field == 'outfit' then
                     hasOutfit = true
-                    break
+                end
+                if columns[i].Field == 'is_default' then
+                    hasIsDefault = true
                 end
             end
             
@@ -33,6 +36,12 @@ function SetupDatabase()
             if not hasOutfit then
                 print("^3[vein-clothing] Adding missing 'outfit' column to player_outfits table^7")
                 MySQL.Async.execute('ALTER TABLE player_outfits ADD COLUMN outfit longtext DEFAULT NULL', {})
+            end
+            
+            -- Add the is_default column if it doesn't exist
+            if not hasIsDefault then
+                print("^3[vein-clothing] Adding missing 'is_default' column to player_outfits table^7")
+                MySQL.Async.execute('ALTER TABLE player_outfits ADD COLUMN is_default tinyint(1) DEFAULT 0', {})
             end
         end)
     end)
@@ -256,30 +265,51 @@ function RegisterCallbacks()
         
         local citizenid = Player.PlayerData.citizenid
         
-        -- Try to get the outfit data with the correct column name
-        local result = MySQL.Sync.fetchAll('SHOW COLUMNS FROM player_outfits', {})
-        local outfitColumn = 'outfit' -- Default column name
-        
-        -- Find the actual column that stores outfit data
-        if result then
-            for i=1, #result do
-                local column = result[i].Field
-                if column == 'outfit' or column == 'outfitdata' or column == 'outfit_data' or column == 'data' then
-                    outfitColumn = column
-                    break
+        -- First check if we need to use a fallback query
+        MySQL.Async.fetchAll('SHOW COLUMNS FROM player_outfits', {}, function(columns)
+            local hasIsDefault = false
+            local outfitColumnName = 'outfit'
+            
+            -- Find the columns we need
+            for i=1, #columns do
+                if columns[i].Field == 'is_default' then
+                    hasIsDefault = true
+                end
+                if columns[i].Field == 'outfit' or columns[i].Field == 'outfitdata' or columns[i].Field == 'outfit_data' or columns[i].Field == 'data' then
+                    outfitColumnName = columns[i].Field
                 end
             end
-        end
-        
-        -- Now use the correct column name
-        local query = string.format('SELECT %s FROM player_outfits WHERE citizenid = ? AND is_default = 1 LIMIT 1', outfitColumn)
-        local outfitResult = MySQL.Sync.fetchScalar(query, {citizenid})
-        
-        if outfitResult then
-            cb(json.decode(outfitResult))
-        else
-            cb(nil)
-        end
+            
+            if hasIsDefault then
+                -- Use the is_default column if it exists
+                local query = string.format('SELECT %s FROM player_outfits WHERE citizenid = ? AND is_default = 1 LIMIT 1', outfitColumnName)
+                MySQL.Async.fetchScalar(query, {citizenid}, function(result)
+                    if result then
+                        cb(json.decode(result))
+                    else
+                        -- Try to get one with outfitname = "default" as a fallback
+                        local fallbackQuery = string.format('SELECT %s FROM player_outfits WHERE citizenid = ? AND outfitname = ? LIMIT 1', outfitColumnName)
+                        MySQL.Async.fetchScalar(fallbackQuery, {citizenid, "default"}, function(defaultResult)
+                            if defaultResult then
+                                cb(json.decode(defaultResult))
+                            else
+                                cb(nil)
+                            end
+                        end)
+                    end
+                end)
+            else
+                -- Fallback to using outfitname = "default"
+                local fallbackQuery = string.format('SELECT %s FROM player_outfits WHERE citizenid = ? AND outfitname = ? LIMIT 1', outfitColumnName)
+                MySQL.Async.fetchScalar(fallbackQuery, {citizenid, "default"}, function(defaultResult)
+                    if defaultResult then
+                        cb(json.decode(defaultResult))
+                    else
+                        cb(nil)
+                    end
+                end)
+            end
+        end)
     end)
     
     -- Get specific outfit by ID callback
@@ -294,30 +324,29 @@ function RegisterCallbacks()
         
         local citizenid = Player.PlayerData.citizenid
         
-        -- Try to get the outfit data with the correct column name
-        local result = MySQL.Sync.fetchAll('SHOW COLUMNS FROM player_outfits', {})
-        local outfitColumn = 'outfit' -- Default column name
-        
-        -- Find the actual column that stores outfit data
-        if result then
-            for i=1, #result do
-                local column = result[i].Field
+        -- Get the correct column name
+        MySQL.Async.fetchAll('SHOW COLUMNS FROM player_outfits', {}, function(columns)
+            local outfitColumnName = 'outfit'
+            
+            -- Find the actual column that stores outfit data
+            for i=1, #columns do
+                local column = columns[i].Field
                 if column == 'outfit' or column == 'outfitdata' or column == 'outfit_data' or column == 'data' then
-                    outfitColumn = column
+                    outfitColumnName = column
                     break
                 end
             end
-        end
-        
-        -- Now use the correct column name
-        local query = string.format('SELECT %s FROM player_outfits WHERE id = ? AND citizenid = ?', outfitColumn)
-        local outfitResult = MySQL.Sync.fetchScalar(query, {outfitId, citizenid})
-        
-        if outfitResult then
-            cb(json.decode(outfitResult))
-        else
-            cb(nil)
-        end
+            
+            -- Now use the correct column name
+            local query = string.format('SELECT %s FROM player_outfits WHERE id = ? AND citizenid = ?', outfitColumnName)
+            MySQL.Async.fetchScalar(query, {outfitId, citizenid}, function(result)
+                if result then
+                    cb(json.decode(result))
+                else
+                    cb(nil)
+                end
+            end)
+        end)
     end)
     
     -- Get dirty clothing callback
