@@ -1,382 +1,175 @@
-# Vein Clothing - Advanced Item-Based Clothing System for FiveM
+# Vein Clothing System
 
-A comprehensive clothing system for FiveM (QB-Core) that implements a realistic, immersive approach to clothing with wear and tear, multiple stores, trading, and a modern React-based UI.
+A simple and powerful clothing system for your FiveM server that lets players buy, wear, and manage their clothes with ease.
 
-## Features
+## 🌟 Features
 
-### Core Features
-- **Item-Based Clothing System**: All clothing exists as actual inventory items
-- **Multi-Store Support**: Different stores with unique inventories and pricing
-- **Modern React UI**: Clean, intuitive interface for shopping and managing outfits
-- **Clothing Condition System**: Items degrade over time and need maintenance
-- **ox_lib Integration**: Enhanced UI and functionality through ox_lib
+### Basic Features
+- Buy clothes from different stores
+- Save and load outfits
+- Wash dirty clothes at laundromats
+- Repair damaged clothes at tailors
+- Simple UI that's easy to use
 
-### Enhanced Experience
-- **Outfit System**: Save, load, name, and set default outfits
-- **Laundromat & Tailor**: Clean dirty clothes and repair damaged items
-- **Wishlist System**: Mark items to remember for future purchase
-- **Rarity System**: Common to exclusive items with appropriate stock levels
-- **Dynamic Stock**: Stores restock based on item rarity and demand
-- **Advanced Search**: Filter by category, rarity, price, and condition
-- **Real-time Preview**: 3D preview of items before purchase
+### Cool Extras
+- Clothes get dirty and damaged over time
+- Different stores have different prices
+- Some clothes are rare and hard to find
+- Stores restock their items automatically
+- Preview clothes before buying
 
-### Advanced Features
-- **In-game Preview**: Preview items with 3D camera before buying
-- **Player-to-Player Trading**: Give or sell clothing to other players
-- **Condition Degradation**: Items worn frequently will degrade faster
-- **Multi-Language Support**: Easily add new language translations
-- **Comprehensive API**: Extensive exports for integration with other scripts
-- **Custom Animations**: Store-specific NPC animations and scenarios
-- **Dynamic Pricing**: Store-specific price multipliers and discounts
+## 🚀 Quick Start Guide
 
-## File Structure
+### 1. Installation
+1. Download the script
+2. Put it in your server's `resources` folder
+3. Add `ensure vein-clothing` to your `server.cfg`
+4. Restart your server
 
-```
-vein-clothing/
-├── client/
-│   ├── main.lua       # Core client functionality
-│   ├── events.lua     # Event handlers
-│   └── nui.lua        # NUI callback handlers
-├── server/
-│   ├── main.lua       # Core server functionality
-│   └── events.lua     # Server-side event handlers
-├── locales/
-│   └── en.lua         # English translations
-├── html/              # Web UI files
-│   ├── index.html     # Main UI template
-│   ├── css/           # Stylesheets
-│   ├── js/            # JavaScript files
-│   ├── fonts/         # Custom fonts
-│   └── img/           # UI images
-├── database/          # SQL files
-├── examples/          # Example configurations
-├── client.lua         # Backward compatibility wrapper
-├── server.lua         # Backward compatibility wrapper
-├── config.lua         # Configuration options
-├── fxmanifest.lua     # Resource manifest
-└── README.md          # Documentation
-```
+### 2. Basic Setup
+1. Open `config.lua` in the script folder
+2. Set `Config.Debug = false` when you're done testing
+3. Make sure you have these installed:
+   - QB-Core
+   - oxmysql
+   - ox_lib
+   - qb-target (optional)
 
-## Installation
-
-1. Extract the resource to your server's resources folder
-2. Import the provided SQL file into your database
-3. Add `ensure vein-clothing` to your server.cfg
-4. Configure the `config.lua` file to match your server's needs
-5. Start or restart your server
-
-## Dependencies
-
-- QB-Core Framework
-- oxmysql
-- ox_lib (recommended for enhanced features)
-
-## Detailed Setup Guide for QB-Core & ox_inventory
-
-### 1. Database Setup
-
+### 3. Database Setup
+Run this SQL command in your database:
 ```sql
--- Run this SQL query in your database
 CREATE TABLE IF NOT EXISTS `player_outfits` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `citizenid` varchar(50) NOT NULL,
-  `outfitname` varchar(50) NOT NULL,
-  `outfit` longtext NOT NULL,
-  `is_default` tinyint(1) NOT NULL DEFAULT 0,
-  PRIMARY KEY (`id`),
-  KEY `citizenid` (`citizenid`)
-);
+  `citizenid` varchar(50) DEFAULT NULL,
+  `outfitname` varchar(50) DEFAULT NULL,
+  `outfit` longtext DEFAULT NULL,
+  `is_default` tinyint(1) DEFAULT 0,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `player_wishlist` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `citizenid` varchar(50) NOT NULL,
-  `item` varchar(50) NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `citizenid` (`citizenid`)
-);
-
-CREATE TABLE IF NOT EXISTS `player_clothing_condition` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `citizenid` varchar(50) NOT NULL,
-  `item` varchar(50) NOT NULL,
-  `condition` float NOT NULL DEFAULT 100,
-  `last_worn` int(11) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `citizen_item` (`citizenid`, `item`)
-);
-
-CREATE TABLE IF NOT EXISTS `clothing_stores` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `store` varchar(50) NOT NULL,
-  `item` varchar(50) NOT NULL,
-  `stock` int(11) NOT NULL DEFAULT 0,
-  `last_restock` datetime DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `store_item` (`store`, `item`)
-);
+  `citizenid` varchar(50) DEFAULT NULL,
+  `item` varchar(50) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
-### 2. ox_inventory Integration
+## 🛍️ How to Use
 
-1. **Add clothing items to ox_inventory/data/items.lua**:
+### Buying Clothes
+1. Go to any clothing store (marked on your map)
+2. Press E to open the store menu
+3. Browse through available clothes
+4. Click on an item to preview it
+5. Click "Buy" to purchase
 
-```lua
--- Example items (add these to your items.lua)
-['tshirt_white'] = {
-    label = 'White T-Shirt',
-    weight = 200,
-    stack = false,
-    close = true,
-    description = 'A simple white t-shirt',
-    client = {
-        category = 'tops',
-        component = 11,
-        rarity = 'common',
-        variations = {
-            {drawable = 0, texture = 0},
-            {drawable = 0, texture = 1}
-        },
-        image = 'tshirt_white',  -- Image file name
-    }
-},
-['jeans_blue'] = {
-    label = 'Blue Jeans',      -- Display name shown in inventory and UI
-    weight = 400,              -- Item weight (affects inventory capacity)
-    stack = false,             -- Whether multiple items can stack (clothing should always be false)
-    close = true,              -- Whether inventory should close when item is used
-    description = 'Classic blue jeans',  -- Description shown when hovering item
-    client = {
-        category = 'pants',    -- Clothing category (affects which body component changes)
-        component = 4,         -- GTA component ID (4 = legs/pants)
-        rarity = 'common',     -- Rarity tier (affects price and stock availability)
-        variations = {         -- Different style/color options for this item
-            {drawable = 0, texture = 0},  -- First variation (drawable = GTA model ID, texture = color/pattern) 
-            {drawable = 0, texture = 1}   -- Second variation (same model, different texture)
-        },
-        image = 'jeans_blue'   -- Inventory image filename (without extension)
-    }
-}
-```
+### Managing Outfits
+1. Use the `/wardrobe` command to open your wardrobe
+2. Click "Save Outfit" to save what you're wearing
+3. Click on a saved outfit to wear it
+4. Use the trash icon to delete outfits you don't want
 
-2. **Add item images to your inventory resource**:
-   - Place item images in `ox_inventory/web/images/`
-   - Images should be named according to the item name (e.g., `tshirt_white.png`)
-   - Recommended size: 100x100 pixels, PNG format with transparency
+### Washing Clothes
+1. Go to a laundromat (marked on your map)
+2. Press E to open the menu
+3. Select dirty clothes to wash
+4. Pay the washing fee
 
-### 3. QB-Core Integration
+### Repairing Clothes
+1. Go to a tailor shop (marked on your map)
+2. Press E to open the menu
+3. Select damaged clothes to repair
+4. Pay the repair cost
 
-1. **Add items to your QBCore shared items**:
+## ⚙️ Configuration
 
-```lua
--- Add to qb-core/shared/items.lua (if not using ox_inventory)
-QBShared.Items = {
-    -- Existing items here
-    
-    -- Clothing items
-    ['tshirt_white'] = {
-        name = 'tshirt_white',
-        label = 'White T-Shirt',
-        weight = 200,
-        type = 'item',
-        image = 'tshirt_white.png',
-        unique = true,
-        useable = true,
-        shouldClose = true,
-        combinable = nil,
-        description = 'A simple white t-shirt',
-        client = {
-            category = 'tops',
-            component = 11,
-            rarity = 'common',
-            variations = {
-                {drawable = 0, texture = 0},
-                {drawable = 0, texture = 1}
-            }
-        }
-    },
-    -- Add more clothing items as needed
-}
-```
+All settings are in `config.lua`. Here are the main things you can change:
 
-### 4. Configure Store Locations
-
-1. Edit `config.lua` to set up store locations and inventories:
-
+### Store Locations
 ```lua
 Config.Stores = {
     ['suburban'] = {
         label = "Suburban",
-        blip = {
-            sprite = 73,
-            color = 47,
-            scale = 0.7
-        },
-        clerk = {
-            model = "a_f_y_hipster_02",
-            scenario = "WORLD_HUMAN_STAND_IMPATIENT"
-        },
-        priceMultiplier = 1.0,
         locations = {
             vector4(127.02, -223.69, 54.56, 68.0),
             vector4(613.08, 2761.72, 42.09, 275.0)
-        },
-        inventory = {
-            "tshirt_white", "tshirt_black", "jeans_blue", "jeans_black",
-            "sneakers_white", "cap_black", "hoodie_gray"
-        }
-    },
-    ['ponsonbys'] = {
-        label = "Ponsonbys",
-        blip = {
-            sprite = 73,
-            color = 4,
-            scale = 0.7
-        },
-        clerk = {
-            model = "s_m_m_tailor_01",
-            scenario = "WORLD_HUMAN_STAND_IMPATIENT"
-        },
-        priceMultiplier = 2.0,
-        locations = {
-            vector4(-708.72, -152.13, 37.42, 120.0),
-            vector4(-165.12, -302.94, 39.73, 250.0)
-        },
-        inventory = {
-            "suit_black", "suit_navy", "dress_shoes_black", 
-            "dress_shoes_brown", "luxury_watch", "designer_glasses"
         }
     }
 }
-
-Config.Laundromats = {
-    vector4(1136.0, -992.0, 46.0, 96.0),
-    vector4(2561.0, 382.0, 108.0, 267.0),
-    vector4(-1889.0, 2163.0, 114.0, 81.0)
-}
-
-Config.Tailors = {
-    vector4(614.0, 2762.0, 42.0, 277.0),
-    vector4(1196.0, 2710.0, 38.0, 178.0),
-    vector4(-1187.0, -768.0, 17.0, 36.0)
-}
 ```
 
-### 5. Configure Degradation System
-
+### Prices and Rarity
 ```lua
--- Condition system parameters
-Config.WornDegradationMin = 1       -- Minimum degradation for worn items per check
-Config.WornDegradationMax = 3       -- Maximum degradation for worn items per check
-Config.DegradationInterval = 300000  -- Check interval in milliseconds (5 minutes)
-Config.DirtyThreshold = 50          -- Condition threshold for items becoming dirty
-Config.DamagedThreshold = 30        -- Condition threshold for items becoming damaged
-```
-
-## Item Properties Reference
-
-### Basic Item Properties
-```lua
-{
-    label = 'Item Name',           -- Display name
-    weight = 200,                  -- Weight in grams
-    stack = false,                 -- Whether items can stack
-    close = true,                  -- Close inventory on use
-    description = 'Description',   -- Item description
-    client = {
-        -- Clothing-specific properties
+Config.Rarity = {
+    common = {
+        maxStock = 15,
+        priceMultiplier = 1.0
+    },
+    rare = {
+        maxStock = 5,
+        priceMultiplier = 2.5
     }
 }
 ```
 
-### Clothing-Specific Properties
+### Condition Settings
 ```lua
-client = {
-    category = 'tops',             -- Clothing category
-    component = 11,                -- GTA component ID
-    rarity = 'common',             -- Rarity tier
-    variations = {                 -- Style/color variations
-        {drawable = 0, texture = 0},
-        {drawable = 0, texture = 1}
-    },
-    image = 'item_name'            -- Inventory image
+Config.Condition = {
+    WornDegradationMin = 1,
+    WornDegradationMax = 3,
+    DirtyThreshold = 50,
+    DamagedThreshold = 30
 }
 ```
 
-### GTA V Component IDs Reference
-| Component | Description |
-|-----------|-------------|
-| 0 | Face |
-| 1 | Mask |
-| 2 | Hair |
-| 3 | Torso |
-| 4 | Legs |
-| 5 | Parachute/Bag |
-| 6 | Shoes |
-| 7 | Accessory |
-| 8 | Undershirt |
-| 9 | Kevlar |
-| 10 | Badge |
-| 11 | Torso 2 |
+## 🎮 Commands
 
-### GTA V Prop IDs Reference
-| Prop | Description |
-|------|-------------|
-| 0 | Hat |
-| 1 | Glasses |
-| 2 | Ear |
-| 6 | Watch |
-| 7 | Bracelet |
+- `/wardrobe` - Open your wardrobe
+- `/outfits` - Manage your saved outfits
+- `/try [item]` - Try on a clothing item
+- `/washclothes` - Open laundromat menu
+- `/repairclothes` - Open tailor menu
 
-## API Reference
+## ❓ Common Questions
 
-### Client Exports
-```lua
--- Open clothing store
-exports['vein-clothing']:OpenStore(storeName)
+### Q: How do I add new clothes?
+A: Add them to your QB-Core shared items and then add them to the store's inventory in `config.lua`
 
--- Open wardrobe
-exports['vein-clothing']:OpenWardrobe()
+### Q: How do I change store locations?
+A: Edit the `locations` in `config.lua` for each store
 
--- Open laundromat
-exports['vein-clothing']:OpenLaundromat()
+### Q: How do I make clothes more expensive?
+A: Adjust the `priceMultiplier` in the store config or rarity settings
 
--- Open tailor
-exports['vein-clothing']:OpenTailor()
+### Q: How do I add more stores?
+A: Copy an existing store in `config.lua` and change its settings
 
--- Get item condition
-local condition = exports['vein-clothing']:GetItemCondition(itemName)
+## 🐛 Troubleshooting
 
--- Set item condition
-exports['vein-clothing']:SetItemCondition(itemName, condition)
-```
+### Problem: Clothes don't appear
+- Make sure the items are in your QB-Core shared items
+- Check that the store has the items in its inventory
+- Verify the database tables are created
 
-### Server Exports
-```lua
--- Get player's outfits
-local outfits = exports['vein-clothing']:GetPlayerOutfits(source)
+### Problem: Can't save outfits
+- Check if the database tables are created
+- Make sure you have less than 10 saved outfits
+- Verify your database connection
 
--- Save player outfit
-exports['vein-clothing']:SavePlayerOutfit(source, outfitName, outfitData)
+### Problem: UI doesn't open
+- Make sure all dependencies are installed
+- Check if ox_lib is running
+- Verify the resource is started in server.cfg
 
--- Delete player outfit
-exports['vein-clothing']:DeletePlayerOutfit(source, outfitId)
+## 📝 Support
 
--- Update item condition
-exports['vein-clothing']:UpdateItemCondition(source, itemName, condition)
-```
+If you need help:
+1. Check the troubleshooting section
+2. Look at the example configs
+3. Ask in our Discord server
+4. Create an issue on GitHub
 
-## Commands
-
-- `/outfits` - Open outfit management menu
-- `/wardrobe` - Open wardrobe
-- `/clothes` - Open clothing store
-- `/laundry` - Open laundromat
-- `/tailor` - Open tailor shop
-
-## Support
-
-For support, feature requests, or bug reports, please visit our [GitHub Issues](https://github.com/your-repo/issues) page.
-
-## License
+## 📜 License
 
 This project is licensed under the MIT License - see the LICENSE file for details. 
