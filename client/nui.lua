@@ -16,7 +16,7 @@ RegisterNUICallback('checkIfWorn', function(data, cb)
 end)
 
 -- Client event to check if an item is being worn (used by server)
-RegisterNetEvent('clothing-system:client:checkIfWorn', function(itemName, callback)
+RegisterNetEvent('vein-clothing:client:checkIfWorn', function(itemName, callback)
     local isWorn = false
     
     for _, outfitItem in pairs(currentOutfit) do
@@ -30,11 +30,11 @@ RegisterNetEvent('clothing-system:client:checkIfWorn', function(itemName, callba
 end)
 
 -- Receive offer request
-RegisterNetEvent('clothing-system:client:receiveOfferRequest', function(sellerId, itemName, price, callback)
+RegisterNetEvent('vein-clothing:client:receiveOfferRequest', function(sellerId, itemName, price, callback)
     local itemLabel = QBCore.Shared.Items[itemName].label
     local sellerName = ""
     
-    QBCore.Functions.TriggerCallback('clothing-system:server:getPlayerName', function(name)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:getPlayerName', function(name)
         sellerName = name
         
         -- Show notification of offer
@@ -68,14 +68,14 @@ RegisterNUICallback('toggleWishlist', function(data, cb)
     local itemName = data.item
     
     -- Check if item is already in wishlist
-    QBCore.Functions.TriggerCallback('clothing-system:server:isItemWishlisted', function(isWishlisted)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:isItemWishlisted', function(isWishlisted)
         if isWishlisted then
             -- Remove from wishlist
-            TriggerServerEvent('clothing-system:server:removeFromWishlist', itemName)
+            TriggerServerEvent('vein-clothing:server:removeFromWishlist', itemName)
             QBCore.Functions.Notify(Lang:t('success.wishlist_removed', {QBCore.Shared.Items[itemName].label}), "success")
         else
             -- Add to wishlist
-            TriggerServerEvent('clothing-system:server:addToWishlist', itemName)
+            TriggerServerEvent('vein-clothing:server:addToWishlist', itemName)
             QBCore.Functions.Notify(Lang:t('success.wishlist_added', {QBCore.Shared.Items[itemName].label}), "success")
         end
         
@@ -94,7 +94,7 @@ RegisterNUICallback('getItemDetails', function(data, cb)
     end
     
     -- Get additional details from server if needed
-    QBCore.Functions.TriggerCallback('clothing-system:server:getItemDetails', function(details)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:getItemDetails', function(details)
         cb({
             success = true,
             item = {
@@ -122,7 +122,7 @@ RegisterNUICallback('tradeItem', function(data, cb)
         return
     end
     
-    TriggerServerEvent('clothing-system:server:tradeItem', targetId, itemName, slot)
+    TriggerServerEvent('vein-clothing:server:tradeItem', targetId, itemName, slot)
     cb({success = true})
 end)
 
@@ -138,7 +138,7 @@ RegisterNUICallback('sellItem', function(data, cb)
         return
     end
     
-    TriggerServerEvent('clothing-system:server:sellItem', targetId, itemName, slot, price)
+    TriggerServerEvent('vein-clothing:server:sellItem', targetId, itemName, slot, price)
     cb({success = true})
 end)
 
@@ -151,7 +151,7 @@ RegisterNUICallback('deleteOutfit', function(data, cb)
         return
     end
     
-    TriggerServerEvent('clothing-system:server:deleteOutfit', outfitId)
+    TriggerServerEvent('vein-clothing:server:deleteOutfit', outfitId)
     cb({success = true})
 end)
 
@@ -165,7 +165,7 @@ RegisterNUICallback('renameOutfit', function(data, cb)
         return
     end
     
-    TriggerServerEvent('clothing-system:server:renameOutfit', outfitId, newName)
+    TriggerServerEvent('vein-clothing:server:renameOutfit', outfitId, newName)
     cb({success = true})
 end)
 
@@ -178,7 +178,7 @@ RegisterNUICallback('setDefaultOutfit', function(data, cb)
         return
     end
     
-    TriggerServerEvent('clothing-system:server:setDefaultOutfit', outfitId)
+    TriggerServerEvent('vein-clothing:server:setDefaultOutfit', outfitId)
     cb({success = true})
 end)
 
@@ -202,7 +202,7 @@ RegisterNUICallback('getNearbyPlayers', function(data, cb)
             if distance <= 3.0 then
                 local targetServerId = GetPlayerServerId(playerId)
                 
-                QBCore.Functions.TriggerCallback('clothing-system:server:getPlayerName', function(name)
+                QBCore.Functions.TriggerCallback('vein-clothing:server:getPlayerName', function(name)
                     table.insert(nearbyPlayers, {
                         id = targetServerId,
                         name = name,
@@ -227,7 +227,7 @@ end)
 -- Register additional NUI callbacks as needed
 RegisterNUICallback('refreshInventory', function(data, cb)
     -- Trigger server to send updated inventory data
-    QBCore.Functions.TriggerCallback('clothing-system:server:getPlayerClothing', function(clothing, outfits, wishlist)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:getPlayerClothing', function(clothing, outfits, wishlist)
         cb({
             success = true,
             clothing = clothing,

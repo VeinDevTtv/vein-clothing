@@ -1,7 +1,7 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
 -- Listen for outfit application event from server
-RegisterNetEvent('clothing-system:client:applyOutfit', function(outfitItems)
+RegisterNetEvent('vein-clothing:client:applyOutfit', function(outfitItems)
     if not outfitItems or #outfitItems == 0 then return end
     
     -- Reset current outfit tracking
@@ -13,9 +13,9 @@ RegisterNetEvent('clothing-system:client:applyOutfit', function(outfitItems)
     -- Apply each item in the outfit
     for _, item in ipairs(outfitItems) do
         -- Set outfit piece based on component type
-        if item.event == "clothing-system:client:wearItem" then
+        if item.event == "vein-clothing:client:wearItem" then
             SetPedComponentVariation(PlayerPedId(), item.component, item.drawable, item.texture, 0)
-        elseif item.event == "clothing-system:client:wearProp" then
+        elseif item.event == "vein-clothing:client:wearProp" then
             SetPedPropIndex(PlayerPedId(), item.component, item.drawable, item.texture, true)
         end
         
@@ -28,7 +28,7 @@ RegisterNetEvent('clothing-system:client:applyOutfit', function(outfitItems)
         }
         
         -- Degrade condition slightly when wearing
-        TriggerServerEvent('clothing-system:server:degradeClothing', item.name, Config.Condition.WornDegradationMin)
+        TriggerServerEvent('vein-clothing:server:degradeClothing', item.name, Config.Condition.WornDegradationMin)
     end
     
     if Config.Notifications.Enable then
@@ -66,23 +66,23 @@ AddEventHandler('QBCore:Client:OnPlayerLoaded', function()
     Wait(1000)
     
     -- Request and apply saved default outfit
-    QBCore.Functions.TriggerCallback('clothing-system:server:getDefaultOutfit', function(outfit)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:getDefaultOutfit', function(outfit)
         if outfit and next(outfit) then
-            TriggerEvent('clothing-system:client:applyOutfit', outfit)
+            TriggerEvent('vein-clothing:client:applyOutfit', outfit)
         end
     end)
 end)
 
 -- Create export to open wardrobe
 exports('openWardrobe', function()
-    TriggerEvent('clothing-system:client:openWardrobe')
+    TriggerEvent('vein-clothing:client:openWardrobe')
 end)
 
 -- Create export to wear outfit
 exports('wearOutfit', function(outfitId)
-    QBCore.Functions.TriggerCallback('clothing-system:server:getOutfitById', function(outfit)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:getOutfitById', function(outfit)
         if outfit then
-            TriggerEvent('clothing-system:client:applyOutfit', outfit.items)
+            TriggerEvent('vein-clothing:client:applyOutfit', outfit.items)
         else
             if Config.Notifications.Enable then
                 QBCore.Functions.Notify("Outfit not found", "error", Config.Notifications.Duration)
@@ -111,9 +111,9 @@ exports('previewClothing', function(itemName, variation)
     end
     
     -- Apply the clothing item to player
-    if item.client.event == "clothing-system:client:wearItem" then
+    if item.client.event == "vein-clothing:client:wearItem" then
         SetPedComponentVariation(PlayerPedId(), component, drawable, texture, 0)
-    elseif item.client.event == "clothing-system:client:wearProp" then
+    elseif item.client.event == "vein-clothing:client:wearProp" then
         SetPedPropIndex(PlayerPedId(), component, drawable, texture, true)
     end
     
@@ -128,16 +128,16 @@ RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     Wait(2000)
     
     -- Sync clothing with inventory items
-    QBCore.Functions.TriggerCallback('clothing-system:server:getSyncedClothing', function(clothingItems)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:getSyncedClothing', function(clothingItems)
         if clothingItems and #clothingItems > 0 then
             -- Reset current appearance
             ResetPedComponents()
             
             -- Apply each currently worn item
             for _, item in ipairs(clothingItems) do
-                if item.event == "clothing-system:client:wearItem" then
+                if item.event == "vein-clothing:client:wearItem" then
                     SetPedComponentVariation(PlayerPedId(), item.component, item.drawable, item.texture, 0)
-                elseif item.event == "clothing-system:client:wearProp" then
+                elseif item.event == "vein-clothing:client:wearProp" then
                     SetPedPropIndex(PlayerPedId(), item.component, item.drawable, item.texture, true)
                 end
                 
@@ -173,9 +173,9 @@ RegisterNetEvent('inventory:client:ItemBox', function(itemData, type)
         for component, outfitItem in pairs(currentOutfit) do
             if outfitItem.name == itemData.name then
                 -- Remove from player model
-                if itemData.event == "clothing-system:client:wearItem" then
+                if itemData.event == "vein-clothing:client:wearItem" then
                     SetPedComponentVariation(PlayerPedId(), component, 0, 0, 0)
-                elseif itemData.event == "clothing-system:client:wearProp" then
+                elseif itemData.event == "vein-clothing:client:wearProp" then
                     ClearPedProp(PlayerPedId(), component)
                 end
                 
@@ -188,7 +188,7 @@ RegisterNetEvent('inventory:client:ItemBox', function(itemData, type)
 end)
 
 -- Player bought an item from a clothing store
-RegisterNetEvent('clothing-system:client:itemPurchased', function(itemName, storeName)
+RegisterNetEvent('vein-clothing:client:itemPurchased', function(itemName, storeName)
     if not itemName or not storeName then return end
     
     local item = QBCore.Shared.Items[itemName]
@@ -227,7 +227,7 @@ RegisterNetEvent('clothing-system:client:itemPurchased', function(itemName, stor
 end)
 
 -- Event when player clothing is damaged
-RegisterNetEvent('clothing-system:client:clothingDamaged', function(itemName, newCondition)
+RegisterNetEvent('vein-clothing:client:clothingDamaged', function(itemName, newCondition)
     if not itemName or not newCondition then return end
     
     -- Only notify if it's a significant decrease or if it reached a threshold
@@ -250,7 +250,7 @@ RegisterNetEvent('clothing-system:client:clothingDamaged', function(itemName, ne
 end)
 
 -- Event when player clothing is cleaned
-RegisterNetEvent('clothing-system:client:clothingCleaned', function(itemName)
+RegisterNetEvent('vein-clothing:client:clothingCleaned', function(itemName)
     if not itemName then return end
     
     if Config.Notifications.Enable then
@@ -268,7 +268,7 @@ RegisterNetEvent('clothing-system:client:clothingCleaned', function(itemName)
 end)
 
 -- Event when player clothing is repaired
-RegisterNetEvent('clothing-system:client:clothingRepaired', function(itemName, newCondition)
+RegisterNetEvent('vein-clothing:client:clothingRepaired', function(itemName, newCondition)
     if not itemName or not newCondition then return end
     
     QBCore.Functions.Notify(Lang:t('success.repaired', {item = QBCore.Shared.Items[itemName].label}), 'success')
@@ -284,26 +284,26 @@ RegisterNetEvent('clothing-system:client:clothingRepaired', function(itemName, n
 end)
 
 -- Event for setting up player's outfit
-RegisterNetEvent('clothing-system:client:setOutfit', function(outfit)
+RegisterNetEvent('vein-clothing:client:setOutfit', function(outfit)
     if not outfit then return end
     
     WearOutfit(outfit)
 end)
 
 -- Event for resetting player's appearance
-RegisterNetEvent('clothing-system:client:resetAppearance', function()
+RegisterNetEvent('vein-clothing:client:resetAppearance', function()
     ResetAppearance()
 end)
 
 -- Event for updating NPC locations
-RegisterNetEvent('clothing-system:client:updateNPCs', function()
+RegisterNetEvent('vein-clothing:client:updateNPCs', function()
     LoadStores()
     LoadLaundromats()
     LoadTailors()
 end)
 
 -- Event for updating store stock
-RegisterNetEvent('clothing-system:client:updateStores', function()
+RegisterNetEvent('vein-clothing:client:updateStores', function()
     -- If player is in a store, refresh the UI
     if isInClothingStore and currentStore then
         OpenClothingStore(currentStore)
@@ -311,28 +311,28 @@ RegisterNetEvent('clothing-system:client:updateStores', function()
 end)
 
 -- Event when an outfits gets created
-RegisterNetEvent('clothing-system:client:outfitCreated', function(outfitId, outfitName)
+RegisterNetEvent('vein-clothing:client:outfitCreated', function(outfitId, outfitName)
     if not outfitId or not outfitName then return end
     
     QBCore.Functions.Notify(Lang:t('success.outfit_created', {name = outfitName}), 'success')
 end)
 
 -- Event when an outfit gets deleted
-RegisterNetEvent('clothing-system:client:outfitDeleted', function(outfitId, outfitName)
+RegisterNetEvent('vein-clothing:client:outfitDeleted', function(outfitId, outfitName)
     if not outfitId then return end
     
     QBCore.Functions.Notify(Lang:t('success.outfit_deleted', {name = outfitName or "Outfit"}), 'success')
 end)
 
 -- Event when an outfit gets renamed
-RegisterNetEvent('clothing-system:client:outfitRenamed', function(outfitId, oldName, newName)
+RegisterNetEvent('vein-clothing:client:outfitRenamed', function(outfitId, oldName, newName)
     if not outfitId or not newName then return end
     
     QBCore.Functions.Notify(Lang:t('success.outfit_renamed', {oldName = oldName or "Outfit", newName = newName}), 'success')
 end)
 
 -- Event when an outfit is set as default
-RegisterNetEvent('clothing-system:client:outfitSetDefault', function(outfitId, outfitName)
+RegisterNetEvent('vein-clothing:client:outfitSetDefault', function(outfitId, outfitName)
     if not outfitId then return end
     
     QBCore.Functions.Notify(Lang:t('success.outfit_set_default', {name = outfitName or "Outfit"}), 'success')
@@ -359,7 +359,7 @@ RegisterNUICallback('purchaseItem', function(data, cb)
         return
     end
     
-    TriggerServerEvent('clothing-system:server:purchaseItem', itemName, storeType)
+    TriggerServerEvent('vein-clothing:server:purchaseItem', itemName, storeType)
     cb({success = true})
 end)
 
@@ -373,7 +373,7 @@ RegisterNUICallback('wearItem', function(data, cb)
         return
     end
     
-    TriggerServerEvent('clothing-system:server:wearItem', itemName, slot)
+    TriggerServerEvent('vein-clothing:server:wearItem', itemName, slot)
     cb({success = true})
 end)
 
@@ -390,7 +390,7 @@ RegisterNUICallback('removeItem', function(data, cb)
     cb({success = success})
     
     if success then
-        TriggerServerEvent('clothing-system:server:removeWornItem', itemName)
+        TriggerServerEvent('vein-clothing:server:removeWornItem', itemName)
     end
 end)
 
@@ -408,7 +408,7 @@ RegisterNUICallback('createOutfit', function(data, cb)
         return
     end
     
-    TriggerServerEvent('clothing-system:server:createOutfit', outfitName, currentOutfit)
+    TriggerServerEvent('vein-clothing:server:createOutfit', outfitName, currentOutfit)
     cb({success = true})
 end)
 
@@ -421,7 +421,7 @@ RegisterNUICallback('wearOutfit', function(data, cb)
         return
     end
     
-    QBCore.Functions.TriggerCallback('clothing-system:server:getOutfit', function(outfit)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:getOutfit', function(outfit)
         if not outfit or not next(outfit) then
             cb({success = false, message = Lang:t('error.outfit_not_found')})
             return
@@ -441,7 +441,7 @@ RegisterNUICallback('washItems', function(data, cb)
         return
     end
     
-    TriggerServerEvent('clothing-system:server:washItems', items)
+    TriggerServerEvent('vein-clothing:server:washItems', items)
     cb({success = true})
 end)
 
@@ -454,7 +454,7 @@ RegisterNUICallback('repairItems', function(data, cb)
         return
     end
     
-    TriggerServerEvent('clothing-system:server:repairItems', items)
+    TriggerServerEvent('vein-clothing:server:repairItems', items)
     cb({success = true})
 end)
 
@@ -470,7 +470,7 @@ RegisterCommand('try', function(source, args)
     end
     
     -- Check if player has the item
-    QBCore.Functions.TriggerCallback('clothing-system:server:hasItem', function(hasItem)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:hasItem', function(hasItem)
         if not hasItem then
             QBCore.Functions.Notify(Lang:t('error.item_not_owned'), 'error')
             return
@@ -482,7 +482,7 @@ end, false)
 
 -- RegisterCommand for /outfits (open outfit menu)
 RegisterCommand('outfits', function()
-    exports['clothing-system']:openWardrobe()
+    exports['vein-clothing']:openWardrobe()
 end, false)
 
 -- Register all commands

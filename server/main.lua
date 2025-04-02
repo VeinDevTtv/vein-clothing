@@ -60,7 +60,7 @@ end
 -- Register callbacks
 function RegisterCallbacks()
     -- Get store inventory callback
-    QBCore.Functions.CreateCallback('clothing-system:server:getStoreInventory', function(source, cb, storeType)
+    QBCore.Functions.CreateCallback('vein-clothing:server:getStoreInventory', function(source, cb, storeType)
         if not StoreStock[storeType] then
             cb(nil)
             return
@@ -97,7 +97,7 @@ function RegisterCallbacks()
     end)
     
     -- Get player's clothing callback
-    QBCore.Functions.CreateCallback('clothing-system:server:getPlayerClothing', function(source, cb)
+    QBCore.Functions.CreateCallback('vein-clothing:server:getPlayerClothing', function(source, cb)
         local src = source
         local Player = QBCore.Functions.GetPlayer(src)
         
@@ -156,7 +156,7 @@ function RegisterCallbacks()
     end)
     
     -- Get player's default outfit callback
-    QBCore.Functions.CreateCallback('clothing-system:server:getDefaultOutfit', function(source, cb)
+    QBCore.Functions.CreateCallback('vein-clothing:server:getDefaultOutfit', function(source, cb)
         local src = source
         local Player = QBCore.Functions.GetPlayer(src)
         
@@ -177,7 +177,7 @@ function RegisterCallbacks()
     end)
     
     -- Get specific outfit by ID callback
-    QBCore.Functions.CreateCallback('clothing-system:server:getOutfit', function(source, cb, outfitId)
+    QBCore.Functions.CreateCallback('vein-clothing:server:getOutfit', function(source, cb, outfitId)
         local src = source
         local Player = QBCore.Functions.GetPlayer(src)
         
@@ -198,7 +198,7 @@ function RegisterCallbacks()
     end)
     
     -- Get dirty clothing callback
-    QBCore.Functions.CreateCallback('clothing-system:server:getDirtyClothing', function(source, cb)
+    QBCore.Functions.CreateCallback('vein-clothing:server:getDirtyClothing', function(source, cb)
         local src = source
         local Player = QBCore.Functions.GetPlayer(src)
         
@@ -232,7 +232,7 @@ function RegisterCallbacks()
     end)
     
     -- Get damaged clothing callback
-    QBCore.Functions.CreateCallback('clothing-system:server:getDamagedClothing', function(source, cb)
+    QBCore.Functions.CreateCallback('vein-clothing:server:getDamagedClothing', function(source, cb)
         local src = source
         local Player = QBCore.Functions.GetPlayer(src)
         
@@ -266,7 +266,7 @@ function RegisterCallbacks()
     end)
     
     -- Restock store callback
-    QBCore.Functions.CreateCallback('clothing-system:server:restockStore', function(source, cb, storeType)
+    QBCore.Functions.CreateCallback('vein-clothing:server:restockStore', function(source, cb, storeType)
         local src = source
         local Player = QBCore.Functions.GetPlayer(src)
         
@@ -435,7 +435,7 @@ function PurchaseItem(source, itemName, storeType)
     end
     
     -- Notify player
-    TriggerClientEvent('clothing-system:client:itemPurchased', src, itemName, Config.Stores[storeType].label)
+    TriggerClientEvent('vein-clothing:client:itemPurchased', src, itemName, Config.Stores[storeType].label)
     
     return true, "Purchase successful"
 end
@@ -604,7 +604,7 @@ function RemovePlayerMoney(source, amount)
 end
 
 -- Update existing callbacks and events to use the new functions
-QBCore.Functions.CreateCallback('clothing-system:server:buyItem', function(source, cb, item, price, storeId)
+QBCore.Functions.CreateCallback('vein-clothing:server:buyItem', function(source, cb, item, price, storeId)
     if not CanPlayerAfford(source, price) then
         TriggerClientEvent('QBCore:Notify', source, "You don't have enough money", 'error')
         cb(false)
@@ -629,7 +629,7 @@ QBCore.Functions.CreateCallback('clothing-system:server:buyItem', function(sourc
 end)
 
 -- Example of updated event handler
-RegisterNetEvent('clothing-system:server:degradeClothing', function(item, amount)
+RegisterNetEvent('vein-clothing:server:degradeClothing', function(item, amount)
     local src = source
     if not item or not amount then return end
     

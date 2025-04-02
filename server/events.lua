@@ -1,7 +1,7 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
 -- Get outfit by ID callback
-QBCore.Functions.CreateCallback('clothing-system:server:getOutfitById', function(source, cb, outfitId)
+QBCore.Functions.CreateCallback('vein-clothing:server:getOutfitById', function(source, cb, outfitId)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     
@@ -29,7 +29,7 @@ QBCore.Functions.CreateCallback('clothing-system:server:getOutfitById', function
 end)
 
 -- Get default outfit callback (outfit that should be applied on player spawn)
-QBCore.Functions.CreateCallback('clothing-system:server:getDefaultOutfit', function(source, cb)
+QBCore.Functions.CreateCallback('vein-clothing:server:getDefaultOutfit', function(source, cb)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     
@@ -104,7 +104,7 @@ QBCore.Functions.CreateCallback('clothing-system:server:getDefaultOutfit', funct
 end)
 
 -- Get synced clothing callback (used when player respawns)
-QBCore.Functions.CreateCallback('clothing-system:server:getSyncedClothing', function(source, cb)
+QBCore.Functions.CreateCallback('vein-clothing:server:getSyncedClothing', function(source, cb)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     
@@ -169,7 +169,7 @@ QBCore.Functions.CreateCallback('clothing-system:server:getSyncedClothing', func
 end)
 
 -- Delete outfit event
-RegisterNetEvent('clothing-system:server:deleteOutfit', function(outfitId)
+RegisterNetEvent('vein-clothing:server:deleteOutfit', function(outfitId)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     
@@ -192,7 +192,7 @@ RegisterNetEvent('clothing-system:server:deleteOutfit', function(outfitId)
 end)
 
 -- Set default outfit event
-RegisterNetEvent('clothing-system:server:setDefaultOutfit', function(outfitId)
+RegisterNetEvent('vein-clothing:server:setDefaultOutfit', function(outfitId)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     
@@ -228,7 +228,7 @@ RegisterNetEvent('clothing-system:server:setDefaultOutfit', function(outfitId)
 end)
 
 -- Trade clothing item to another player
-RegisterNetEvent('clothing-system:server:tradeItem', function(targetId, itemName, slot)
+RegisterNetEvent('vein-clothing:server:tradeItem', function(targetId, itemName, slot)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     local Target = QBCore.Functions.GetPlayer(targetId)
@@ -247,7 +247,7 @@ RegisterNetEvent('clothing-system:server:tradeItem', function(targetId, itemName
     end
     
     -- Check if the item is being worn
-    TriggerClientEvent('clothing-system:client:checkIfWorn', src, itemName, function(isWorn)
+    TriggerClientEvent('vein-clothing:client:checkIfWorn', src, itemName, function(isWorn)
         if isWorn then
             TriggerClientEvent('QBCore:Notify', src, "You can't trade an item you're wearing", "error")
             return
@@ -271,7 +271,7 @@ RegisterNetEvent('clothing-system:server:tradeItem', function(targetId, itemName
 end)
 
 -- Sell clothing to another player
-RegisterNetEvent('clothing-system:server:sellItem', function(targetId, itemName, slot, price)
+RegisterNetEvent('vein-clothing:server:sellItem', function(targetId, itemName, slot, price)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     local Target = QBCore.Functions.GetPlayer(targetId)
@@ -303,7 +303,7 @@ RegisterNetEvent('clothing-system:server:sellItem', function(targetId, itemName,
     end
     
     -- Send offer to target player
-    TriggerClientEvent('clothing-system:client:receiveOfferRequest', targetId, src, itemName, price, function(accepted)
+    TriggerClientEvent('vein-clothing:client:receiveOfferRequest', targetId, src, itemName, price, function(accepted)
         if accepted then
             -- Remove item from seller
             if Player.Functions.RemoveItem(itemName, 1, slot) then
@@ -339,7 +339,7 @@ RegisterNetEvent('clothing-system:server:sellItem', function(targetId, itemName,
 end)
 
 -- Rename outfit event
-RegisterNetEvent('clothing-system:server:renameOutfit', function(outfitId, newName)
+RegisterNetEvent('vein-clothing:server:renameOutfit', function(outfitId, newName)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     

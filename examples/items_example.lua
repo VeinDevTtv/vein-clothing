@@ -17,7 +17,7 @@
         rarity = 'common',
         condition = 100,
         component = 11, -- PED component ID
-        event = 'clothing-system:client:wearItem'
+        event = 'vein-clothing:client:wearItem'
     }
 },
 
@@ -36,7 +36,7 @@
         rarity = 'common',
         condition = 100,
         component = 11,
-        event = 'clothing-system:client:wearItem'
+        event = 'vein-clothing:client:wearItem'
     }
 },
 
@@ -59,7 +59,7 @@
         rarity = 'uncommon',
         condition = 100,
         component = 11,
-        event = 'clothing-system:client:wearItem'
+        event = 'vein-clothing:client:wearItem'
     }
 },
 
@@ -77,7 +77,7 @@
         rarity = 'rare',
         condition = 100,
         component = 11,
-        event = 'clothing-system:client:wearItem'
+        event = 'vein-clothing:client:wearItem'
     }
 },
 
@@ -96,7 +96,7 @@
         rarity = 'common',
         condition = 100,
         component = 4,
-        event = 'clothing-system:client:wearItem'
+        event = 'vein-clothing:client:wearItem'
     }
 },
 
@@ -114,7 +114,7 @@
         rarity = 'common',
         condition = 100,
         component = 4,
-        event = 'clothing-system:client:wearItem'
+        event = 'vein-clothing:client:wearItem'
     }
 },
 
@@ -133,7 +133,7 @@
         rarity = 'common',
         condition = 100,
         component = 6,
-        event = 'clothing-system:client:wearItem'
+        event = 'vein-clothing:client:wearItem'
     }
 },
 
@@ -151,7 +151,7 @@
         rarity = 'rare',
         condition = 100,
         component = 6,
-        event = 'clothing-system:client:wearItem'
+        event = 'vein-clothing:client:wearItem'
     }
 },
 
@@ -170,7 +170,7 @@
         rarity = 'common',
         condition = 100,
         component = 0, -- Prop component (hats are props)
-        event = 'clothing-system:client:wearProp'
+        event = 'vein-clothing:client:wearProp'
     }
 },
 
@@ -188,7 +188,7 @@
         rarity = 'exclusive',
         condition = 100,
         component = 1, -- Prop component (glasses are props)
-        event = 'clothing-system:client:wearProp'
+        event = 'vein-clothing:client:wearProp'
     }
 },
 
@@ -206,7 +206,7 @@
         rarity = 'exclusive',
         condition = 100,
         component = 6, -- Prop component (watches are props)
-        event = 'clothing-system:client:wearProp'
+        event = 'vein-clothing:client:wearProp'
     }
 },
 
@@ -225,7 +225,7 @@
         rarity = 'rare',
         condition = 100,
         component = 11,
-        event = 'clothing-system:client:wearItem'
+        event = 'vein-clothing:client:wearItem'
     }
 },
 
@@ -243,7 +243,7 @@
         rarity = 'common',
         condition = 100,
         component = 4,
-        event = 'clothing-system:client:wearItem'
+        event = 'vein-clothing:client:wearItem'
     }
 },
 
@@ -262,7 +262,7 @@
         rarity = 'exclusive',
         condition = 100,
         component = 7, -- Chains/accessories component
-        event = 'clothing-system:client:wearItem'
+        event = 'vein-clothing:client:wearItem'
     }
 },
 
@@ -280,7 +280,7 @@
         rarity = 'limited',
         condition = 100,
         component = 6,
-        event = 'clothing-system:client:wearItem'
+        event = 'vein-clothing:client:wearItem'
     }
 }
 

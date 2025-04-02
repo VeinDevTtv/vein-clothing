@@ -125,7 +125,7 @@ function LoadPeds()
                     options = {
                         {
                             type = "client",
-                            event = "clothing-system:client:openStore",
+                            event = "vein-clothing:client:openStore",
                             icon = "fas fa-tshirt",
                             label = "Browse " .. storeData.label,
                             store = storeName
@@ -168,7 +168,7 @@ CreateThread(function()
                         QBCore.Functions.DrawText3D(location.x, location.y, location.z, "[E] Browse " .. storeData.label)
                         
                         if IsControlJustPressed(0, 38) then -- E key
-                            TriggerEvent("clothing-system:client:openStore", {store = storeName})
+                            TriggerEvent("vein-clothing:client:openStore", {store = storeName})
                         end
                     end
                     
@@ -191,7 +191,7 @@ CreateThread(function()
                         QBCore.Functions.DrawText3D(location.coords.x, location.coords.y, location.coords.z, "[E] Use Laundromat")
                         
                         if IsControlJustPressed(0, 38) then -- E key
-                            TriggerEvent("clothing-system:client:openLaundromat")
+                            TriggerEvent("vein-clothing:client:openLaundromat")
                         end
                     end
                     
@@ -209,7 +209,7 @@ CreateThread(function()
                         QBCore.Functions.DrawText3D(location.coords.x, location.coords.y, location.coords.z, "[E] Use Tailor Services")
                         
                         if IsControlJustPressed(0, 38) then -- E key
-                            TriggerEvent("clothing-system:client:openTailor")
+                            TriggerEvent("vein-clothing:client:openTailor")
                         end
                     end
                     
@@ -223,7 +223,7 @@ CreateThread(function()
 end)
 
 -- Open clothing store UI
-RegisterNetEvent('clothing-system:client:openStore', function(data)
+RegisterNetEvent('vein-clothing:client:openStore', function(data)
     if inWardrobe then return end
     
     local storeName = data.store
@@ -235,7 +235,7 @@ RegisterNetEvent('clothing-system:client:openStore', function(data)
     end
     
     -- Get store inventory from server
-    QBCore.Functions.TriggerCallback('clothing-system:server:getStoreInventory', function(inventory)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:getStoreInventory', function(inventory)
         if not inventory then
             QBCore.Functions.Notify("Failed to load store inventory", "error")
             return
@@ -314,10 +314,10 @@ RegisterNUICallback('previewItem', function(data, cb)
     }
     
     -- Apply clothing to player ped
-    if item.client.event == "clothing-system:client:wearItem" then
+    if item.client.event == "vein-clothing:client:wearItem" then
         -- Component-based clothing
         SetPedComponentVariation(PlayerPedId(), component, drawable, texture, 0)
-    elseif item.client.event == "clothing-system:client:wearProp" then
+    elseif item.client.event == "vein-clothing:client:wearProp" then
         -- Prop-based item (hats, glasses, etc)
         SetPedPropIndex(PlayerPedId(), component, drawable, texture, true)
     end
@@ -331,7 +331,7 @@ RegisterNUICallback('purchaseItem', function(data, cb)
     local price = data.price
     local variation = data.variation or 0
     
-    QBCore.Functions.TriggerCallback('clothing-system:server:purchaseItem', function(success, reason)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:purchaseItem', function(success, reason)
         if success then
             QBCore.Functions.Notify("Purchased " .. QBCore.Shared.Items[itemName].label, "success")
             
@@ -358,7 +358,7 @@ end)
 RegisterNUICallback('updateWishlist', function(data, cb)
     local wishlist = data.wishlist
     
-    TriggerServerEvent('clothing-system:server:updateWishlist', wishlist)
+    TriggerServerEvent('vein-clothing:server:updateWishlist', wishlist)
     
     cb({success = true})
 end)
@@ -367,7 +367,7 @@ end)
 RegisterNUICallback('saveOutfit', function(data, cb)
     local outfit = data.outfit
     
-    TriggerServerEvent('clothing-system:server:saveOutfit', outfit)
+    TriggerServerEvent('vein-clothing:server:saveOutfit', outfit)
     
     cb({success = true})
 end)
@@ -523,7 +523,7 @@ function ShowNotification(message, type, duration)
 end
 
 -- Update existing code to use the new functions
-RegisterNetEvent('clothing-system:client:wearItem', function(itemData)
+RegisterNetEvent('vein-clothing:client:wearItem', function(itemData)
     if not itemData then return end
     
     local success = HandleClothingItem(itemData)
@@ -532,7 +532,7 @@ RegisterNetEvent('clothing-system:client:wearItem', function(itemData)
         currentOutfit[itemData.client.category] = itemData
         
         -- Trigger degradation
-        TriggerServerEvent('clothing-system:server:degradeClothing', itemData.name, Config.Condition.WornDegradationMin)
+        TriggerServerEvent('vein-clothing:server:degradeClothing', itemData.name, Config.Condition.WornDegradationMin)
         
         -- Show notification
         ShowNotification('You are now wearing ' .. itemData.label, 'success')
@@ -543,7 +543,7 @@ RegisterNetEvent('clothing-system:client:wearItem', function(itemData)
 end)
 
 -- Wear/remove prop item (hats, glasses, etc.)
-RegisterNetEvent('clothing-system:client:wearProp', function(itemData)
+RegisterNetEvent('vein-clothing:client:wearProp', function(itemData)
     if not itemData or not itemData.client then return end
     
     local component = itemData.client.component
@@ -557,7 +557,7 @@ RegisterNetEvent('clothing-system:client:wearProp', function(itemData)
         currentOutfit[component] = nil
         
         -- Degrade condition slightly when removing
-        TriggerServerEvent('clothing-system:server:degradeClothing', itemData.name, 0.1)
+        TriggerServerEvent('vein-clothing:server:degradeClothing', itemData.name, 0.1)
     else
         -- Wear prop
         SetPedPropIndex(PlayerPedId(), component, drawable, texture, true)
@@ -571,17 +571,17 @@ RegisterNetEvent('clothing-system:client:wearProp', function(itemData)
         }
         
         -- Degrade condition when wearing
-        TriggerServerEvent('clothing-system:server:degradeClothing', itemData.name, Config.Condition.degradePerUse)
+        TriggerServerEvent('vein-clothing:server:degradeClothing', itemData.name, Config.Condition.degradePerUse)
     end
 end)
 
 -- Open personal wardrobe
-RegisterNetEvent('clothing-system:client:openWardrobe', function()
+RegisterNetEvent('vein-clothing:client:openWardrobe', function()
     if inWardrobe then return end
     inWardrobe = true
     
     -- Get player's owned clothing and saved outfits
-    QBCore.Functions.TriggerCallback('clothing-system:server:getPlayerClothing', function(clothing, outfits, wishlist)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:getPlayerClothing', function(clothing, outfits, wishlist)
         if not clothing then
             QBCore.Functions.Notify("Failed to load wardrobe", "error")
             inWardrobe = false
@@ -603,9 +603,9 @@ RegisterNetEvent('clothing-system:client:openWardrobe', function()
 end)
 
 -- Open laundromat
-RegisterNetEvent('clothing-system:client:openLaundromat', function()
+RegisterNetEvent('vein-clothing:client:openLaundromat', function()
     -- Get player's dirty clothing
-    QBCore.Functions.TriggerCallback('clothing-system:server:getDirtyClothing', function(clothing)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:getDirtyClothing', function(clothing)
         if not clothing or #clothing == 0 then
             QBCore.Functions.Notify("You don't have any clothes that need washing", "error")
             return
@@ -625,9 +625,9 @@ RegisterNetEvent('clothing-system:client:openLaundromat', function()
 end)
 
 -- Open tailor shop
-RegisterNetEvent('clothing-system:client:openTailor', function()
+RegisterNetEvent('vein-clothing:client:openTailor', function()
     -- Get player's damaged clothing
-    QBCore.Functions.TriggerCallback('clothing-system:server:getDamagedClothing', function(clothing)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:getDamagedClothing', function(clothing)
         if not clothing or #clothing == 0 then
             QBCore.Functions.Notify("You don't have any clothes that need repairs", "error")
             return
@@ -650,7 +650,7 @@ end)
 RegisterNUICallback('washClothing', function(data, cb)
     local itemName = data.item
     
-    QBCore.Functions.TriggerCallback('clothing-system:server:washClothing', function(success, reason)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:washClothing', function(success, reason)
         if success then
             QBCore.Functions.Notify("Washed " .. QBCore.Shared.Items[itemName].label, "success")
         else
@@ -665,7 +665,7 @@ end)
 RegisterNUICallback('repairClothing', function(data, cb)
     local itemName = data.item
     
-    QBCore.Functions.TriggerCallback('clothing-system:server:repairClothing', function(success, reason)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:repairClothing', function(success, reason)
         if success then
             QBCore.Functions.Notify("Repaired " .. QBCore.Shared.Items[itemName].label, "success")
         else
@@ -686,7 +686,7 @@ end)
 
 -- Player commands
 RegisterCommand(Config.WardrobeCommand, function()
-    TriggerEvent('clothing-system:client:openWardrobe')
+    TriggerEvent('vein-clothing:client:openWardrobe')
 end, false)
 
 RegisterCommand(Config.OutfitCommand, function(source, args)
@@ -696,7 +696,7 @@ RegisterCommand(Config.OutfitCommand, function(source, args)
     end
     
     local outfitName = args[1]
-    TriggerServerEvent('clothing-system:server:wearOutfit', outfitName)
+    TriggerServerEvent('vein-clothing:server:wearOutfit', outfitName)
 end, false)
 
 RegisterCommand('washclothes', function()
@@ -711,7 +711,7 @@ RegisterCommand('washclothes', function()
     end
     
     if nearLaundromat then
-        TriggerEvent('clothing-system:client:openLaundromat')
+        TriggerEvent('vein-clothing:client:openLaundromat')
     else
         QBCore.Functions.Notify("You need to be at a laundromat", "error")
     end
@@ -729,7 +729,7 @@ RegisterCommand('repairclothes', function()
     end
     
     if nearTailor then
-        TriggerEvent('clothing-system:client:openTailor')
+        TriggerEvent('vein-clothing:client:openTailor')
     else
         QBCore.Functions.Notify("You need to be at a tailor shop", "error")
     end
@@ -752,7 +752,7 @@ function LoadPlayerOutfit()
             Wait(100)
         end
         
-        QBCore.Functions.TriggerCallback('clothing-system:server:getDefaultOutfit', function(outfit)
+        QBCore.Functions.TriggerCallback('vein-clothing:server:getDefaultOutfit', function(outfit)
             if outfit and next(outfit) then
                 WearOutfit(outfit)
                 QBCore.Functions.Notify(Lang:t('info.default_outfit_loaded'), 'success')
@@ -984,7 +984,7 @@ function WearOutfit(outfit)
     currentOutfit = outfit
     
     -- Update the last worn timestamp for each item
-    TriggerServerEvent('clothing-system:server:updateLastWorn', outfit)
+    TriggerServerEvent('vein-clothing:server:updateLastWorn', outfit)
 end
 
 -- Remove a specific clothing item
@@ -1210,7 +1210,7 @@ function OpenClothingStore(storeType)
     local storeData = Config.Stores[storeType]
     
     -- Get store inventory from server
-    QBCore.Functions.TriggerCallback('clothing-system:server:getStoreInventory', function(inventory)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:getStoreInventory', function(inventory)
         if not inventory then
             QBCore.Functions.Notify(Lang:t('error.store_inventory_error'), 'error')
             return
@@ -1233,7 +1233,7 @@ end
 -- Opens the laundromat UI
 function OpenLaundromat()
     -- Get player's dirty clothing
-    QBCore.Functions.TriggerCallback('clothing-system:server:getDirtyClothing', function(dirtyClothing)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:getDirtyClothing', function(dirtyClothing)
         if not dirtyClothing or #dirtyClothing == 0 then
             QBCore.Functions.Notify(Lang:t('info.no_dirty_clothing'), 'primary')
             return
@@ -1253,7 +1253,7 @@ end
 -- Opens the tailor UI
 function OpenTailor()
     -- Get player's damaged clothing
-    QBCore.Functions.TriggerCallback('clothing-system:server:getDamagedClothing', function(damagedClothing)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:getDamagedClothing', function(damagedClothing)
         if not damagedClothing or #damagedClothing == 0 then
             QBCore.Functions.Notify(Lang:t('info.no_damaged_clothing'), 'primary')
             return
@@ -1273,7 +1273,7 @@ end
 -- Export functions 
 exports('openWardrobe', function()
     -- Get player's clothing and outfits
-    QBCore.Functions.TriggerCallback('clothing-system:server:getPlayerClothing', function(clothing, outfits, wishlist)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:getPlayerClothing', function(clothing, outfits, wishlist)
         SendNUIMessage({
             action = "openWardrobe",
             data = {
