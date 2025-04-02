@@ -1,68 +1,45 @@
--- client.lua
-local QBCore = exports['qb-core']:GetCoreObject()
-local currentStore = nil
+-- This is a compatibility file to ensure scripts that import the resource directly still work
+-- All functionality is organized in the client/ folder
 
--- Function to open the clothing store UI
-function OpenClothingStore(storeType)
-    currentStore = storeType
-    SetNuiFocus(true, true)
-    SendNUIMessage({
-        action = "openStore",
-        storeType = storeType,
-        storeData = Config.Stores[storeType]
-    })
-end
+-- Forward any exported functions from the client folder to the main resource
+local function ExposeExports()
+    -- Expose the exports defined in client/events.lua
+    exports('openWardrobe', function()
+        return exports[GetCurrentResourceName()]:openWardrobe()
+    end)
+    
+    exports('wearOutfit', function(outfitId)
+        return exports[GetCurrentResourceName()]:wearOutfit(outfitId)
+    end)
+    
+    exports('previewClothing', function(itemName, variation)
+        return exports[GetCurrentResourceName()]:previewClothing(itemName, variation)
+    end)
 
--- NUI callback: when a player wants to purchase an item
-RegisterNUICallback('purchaseItem', function(data, cb)
-    local itemName = data.itemName
-    local price = data.price
-    TriggerServerEvent('advanced_clothing:purchase', { storeType = currentStore, itemName = itemName, price = price })
-    cb({ status = "ok" })
-end)
-
--- NUI callback: preview item (using FiveM natives)
-RegisterNUICallback('previewItem', function(data, cb)
-    local itemName = data.itemName
-    local playerPed = PlayerPedId()
-    -- Example: adjust the player’s clothing based on the item preview.
-    -- (This is pseudocode; replace with actual component and drawable IDs.)
-    if itemName == "tshirt_basic" then
-        SetPedComponentVariation(playerPed, 8, 15, 0, 2)
-    elseif itemName == "suit_luxury" then
-        SetPedComponentVariation(playerPed, 11, 10, 0, 2)
-    end
-    cb({ status = "previewed" })
-end)
-
--- Command for testing the UI
-RegisterCommand("openstore", function(source, args)
-    local storeType = args[1] or "Affordable"
-    if Config.Stores[storeType] then
-        OpenClothingStore(storeType)
-    else
-        QBCore.Functions.Notify("Store type not found!", "error")
-    end
-end, false)
-
--- NUI callback to close the UI
-RegisterNUICallback('closeUI', function(data, cb)
-    SetNuiFocus(false, false)
-    cb({ status = "closed" })
-end)
-
--- Periodic wear & tear: degrade clothing condition every 5 minutes
-Citizen.CreateThread(function()
-    while true do
-        Citizen.Wait(300000) -- 300,000 ms = 5 minutes
-        local playerItems = exports.ox_inventory:GetItems()
-        for _, item in ipairs(playerItems) do
-            if item.type == "clothing" then
-                local currentCondition = item.metadata and item.metadata.condition or 100
-                local newCondition = currentCondition - math.random(1, 5)
-                if newCondition < 0 then newCondition = 0 end
-                TriggerServerEvent('advanced_clothing:degrade', { itemName = item.name, condition = newCondition })
+    -- Additional exports
+    exports('getWornItems', function()
+        return currentOutfit
+    end)
+    
+    exports('isItemWorn', function(itemName)
+        for _, item in pairs(currentOutfit) do
+            if item.name == itemName then
+                return true
             end
         end
-    end
+        return false
+    end)
+    
+    exports('removeAllClothing', function()
+        TriggerEvent('clothing-system:client:resetAppearance')
+    end)
+end
+
+CreateThread(function()
+    -- Wait for resource to fully start
+    Wait(500)
+    ExposeExports()
+    
+    -- Log message indicating that this file is deprecated
+    print('^3[clothing-system]^7 Warning: Loading from root client.lua is deprecated. Please use the new folder structure.')
 end)
