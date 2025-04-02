@@ -37,6 +37,14 @@ local clothingComponents = {
     accessories = {component = 7, texture = 0}
 }
 
+-- Add this near the top of the file, after QBCore initialization
+local ClothingConfig = exports['vein-clothing']:GetClothingConfig()
+
+-- Function to get clothing config for an item
+function GetClothingConfig(itemName)
+    return ClothingConfig[itemName] or nil
+end
+
 -- Initialize player data
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     PlayerData = QBCore.Functions.GetPlayerData()
@@ -382,44 +390,63 @@ end)
 local function HandleClothingItem(itemData)
     if not itemData then return false end
     
+    -- Get the clothing config
+    local config = GetClothingConfig(itemData.name)
+    if not config then
+        if Config.Debug then
+            print("^1[ERROR] No clothing configuration found for item: " .. itemData.name .. "^7")
+        end
+        return false
+    end
+    
     -- Get the component ID based on the category
-    local componentId = GetComponentIdFromCategory(itemData.client.category)
-    if not componentId then return false end
+    local componentId = GetComponentIdFromCategory(config.category)
+    if not componentId and config.type ~= 'prop' then 
+        if Config.Debug then
+            print("^1[ERROR] Invalid category for item: " .. itemData.name .. "^7")
+        end
+        return false 
+    end
     
     -- Handle different types of clothing
-    if itemData.client.type == 'prop' then
+    if config.type == 'prop' then
         -- Handle props (hats, glasses, etc.)
-        local propId = GetPropIdFromCategory(itemData.client.category)
-        if not propId then return false end
+        local propId = GetPropIdFromCategory(config.category)
+        if not propId then 
+            if Config.Debug then
+                print("^1[ERROR] Invalid prop category for item: " .. itemData.name .. "^7")
+            end
+            return false 
+        end
         
         -- Check if the prop exists in the addon
-        if not HasPropLoaded(itemData.client.model) then
+        if config.isAddon and not HasPropLoaded(config.model) then
             -- Load the addon prop if needed
-            RequestModel(itemData.client.model)
-            while not HasModelLoaded(itemData.client.model) do
+            RequestModel(config.model)
+            while not HasModelLoaded(config.model) do
                 Wait(0)
             end
         end
         
         -- Apply the prop
-        SetPedPropIndex(PlayerPedId(), propId, itemData.client.drawable, itemData.client.texture, true)
+        SetPedPropIndex(PlayerPedId(), propId, config.drawable, config.texture, true)
     else
         -- Handle regular clothing components
-        if itemData.client.isAddon then
+        if config.isAddon then
             -- Handle addon clothing
-            if not HasAddonClothingLoaded(itemData.client.model) then
+            if not HasAddonClothingLoaded(config.model) then
                 -- Load the addon clothing if needed
-                RequestModel(itemData.client.model)
-                while not HasModelLoaded(itemData.client.model) do
+                RequestModel(config.model)
+                while not HasModelLoaded(config.model) do
                     Wait(0)
                 end
             end
             
             -- Apply addon clothing
-            SetPedComponentVariation(PlayerPedId(), componentId, itemData.client.drawable, itemData.client.texture, 0)
+            SetPedComponentVariation(PlayerPedId(), componentId, config.drawable, config.texture, 0)
         else
             -- Handle default GTA clothing
-            SetPedComponentVariation(PlayerPedId(), componentId, itemData.client.drawable, itemData.client.texture, 0)
+            SetPedComponentVariation(PlayerPedId(), componentId, config.drawable, config.texture, 0)
         end
     end
     

@@ -558,4 +558,107 @@ To use a custom inventory system:
 
 1. Set `Config.Inventory.Type = 'custom'`
 2. Configure all the event names, export functions, and resource names in the Custom section
-3. Ensure your custom inventory system has equivalent functions for all required operations 
+3. Ensure your custom inventory system has equivalent functions for all required operations
+
+## 🔢 Adding Items to QB-Core
+
+To make clothing items work with this system, you need to properly define them in your QB-Core shared items. Follow these steps:
+
+### 1. Add Basic Items to QB-Core
+
+Open your `qb-core/shared/items.lua` file and add your clothing items:
+
+```lua
+-- In qb-core/shared/items.lua
+QBCore.Shared.Items = {
+    -- Existing items...
+    
+    ['tshirt_white'] = {
+        name = 'tshirt_white',
+        label = 'White T-Shirt',
+        weight = 200,
+        type = 'item',
+        image = 'tshirt_white.png', -- Make sure this image exists in your inventory resource
+        unique = true,
+        useable = true,
+        shouldClose = true,
+        combinable = nil,
+        description = 'A simple white t-shirt'
+    },
+    
+    -- Add more clothing items...
+}
+```
+
+### 2. Add Client Config Inside Your Clothing Script
+
+Create a file called `shared/items.lua` in your vein-clothing folder with the client configurations:
+
+```lua
+-- In vein-clothing/shared/items.lua
+exports('GetClothingConfig', function()
+    return {
+        ['tshirt_white'] = {
+            category = 'torso2',
+            component = 11,
+            drawable = 0,
+            texture = 0,
+            rarity = 'common'
+        },
+        -- Add more clothing configurations...
+    }
+end)
+```
+
+### 3. Initialize Clothing Configuration
+
+Add this to your client/main.lua:
+
+```lua
+-- In client/main.lua
+local ClothingConfig = exports['vein-clothing']:GetClothingConfig()
+
+-- Function to get clothing config for an item
+function GetClothingConfig(itemName)
+    return ClothingConfig[itemName] or nil
+end
+```
+
+### 4. Update Your Config.lua Store Inventory
+
+Now you can add your properly defined items to the store inventories:
+
+```lua
+-- In config.lua
+Config.Stores = {
+    ['suburban'] = {
+        -- Other settings...
+        inventory = {
+            "tshirt_white", "tshirt_black", "jeans_blue"
+            -- Add more clothing items that exist in your QB-Core
+        }
+    }
+}
+```
+
+### 5. Example Item List to Get Started
+
+Here are some common clothing items you can add:
+
+```lua
+-- T-shirts
+['tshirt_white'] = { /* item properties */ }
+['tshirt_black'] = { /* item properties */ }
+
+-- Pants/Jeans
+['jeans_blue'] = { /* item properties */ }
+['pants_black'] = { /* item properties */ }
+
+-- Shoes
+['sneakers_white'] = { /* item properties */ }
+['shoes_black'] = { /* item properties */ }
+
+-- Accessories
+['hat_cap'] = { /* item properties */ }
+['glasses_casual'] = { /* item properties */ }
+``` 
