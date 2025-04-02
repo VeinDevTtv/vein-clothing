@@ -7,12 +7,19 @@ local NeedsRestock = {}
 
 -- Initialize function (called on script start)
 function Initialize()
+    -- Set up the database tables first
+    SetupDatabase()
+    
     -- Initialize store stock
     InitializeStoreStock()
+    
     -- Start periodic functions
     StartPeriodicFunctions()
+    
     -- Register callbacks
     RegisterCallbacks()
+    
+    print("^2[vein-clothing] Initialization completed successfully^7")
 end
 
 -- Initialize store stock from config
@@ -180,10 +187,27 @@ function RegisterCallbacks()
         
         local citizenid = Player.PlayerData.citizenid
         
-        local result = MySQL.Sync.fetchScalar('SELECT outfit FROM player_outfits WHERE citizenid = ? AND is_default = 1 LIMIT 1', {citizenid})
+        -- Try to get the outfit data with the correct column name
+        local result = MySQL.Sync.fetchAll('SHOW COLUMNS FROM player_outfits', {})
+        local outfitColumn = 'outfit' -- Default column name
         
+        -- Find the actual column that stores outfit data
         if result then
-            cb(json.decode(result))
+            for i=1, #result do
+                local column = result[i].Field
+                if column == 'outfit' or column == 'outfitdata' or column == 'outfit_data' or column == 'data' then
+                    outfitColumn = column
+                    break
+                end
+            end
+        end
+        
+        -- Now use the correct column name
+        local query = string.format('SELECT %s FROM player_outfits WHERE citizenid = ? AND is_default = 1 LIMIT 1', outfitColumn)
+        local outfitResult = MySQL.Sync.fetchScalar(query, {citizenid})
+        
+        if outfitResult then
+            cb(json.decode(outfitResult))
         else
             cb(nil)
         end
@@ -201,10 +225,27 @@ function RegisterCallbacks()
         
         local citizenid = Player.PlayerData.citizenid
         
-        local result = MySQL.Sync.fetchScalar('SELECT outfit FROM player_outfits WHERE id = ? AND citizenid = ?', {outfitId, citizenid})
+        -- Try to get the outfit data with the correct column name
+        local result = MySQL.Sync.fetchAll('SHOW COLUMNS FROM player_outfits', {})
+        local outfitColumn = 'outfit' -- Default column name
         
+        -- Find the actual column that stores outfit data
         if result then
-            cb(json.decode(result))
+            for i=1, #result do
+                local column = result[i].Field
+                if column == 'outfit' or column == 'outfitdata' or column == 'outfit_data' or column == 'data' then
+                    outfitColumn = column
+                    break
+                end
+            end
+        end
+        
+        -- Now use the correct column name
+        local query = string.format('SELECT %s FROM player_outfits WHERE id = ? AND citizenid = ?', outfitColumn)
+        local outfitResult = MySQL.Sync.fetchScalar(query, {outfitId, citizenid})
+        
+        if outfitResult then
+            cb(json.decode(outfitResult))
         else
             cb(nil)
         end
@@ -768,4 +809,73 @@ end)
 CreateThread(function()
     Wait(2000) -- Wait for everything to load
     Initialize()
-end) 
+end)
+
+-- Function to ensure database tables are set up correctly
+function SetupDatabase()
+    -- Check if the player_outfits table needs updates
+    MySQL.Async.execute([[
+        CREATE TABLE IF NOT EXISTS `player_outfits` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `citizenid` varchar(50) DEFAULT NULL,
+            `outfitname` varchar(50) DEFAULT NULL,
+            `outfit` longtext DEFAULT NULL,
+            `is_default` tinyint(1) DEFAULT 0,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ]], {}, function()
+        -- Check if the columns exist
+        MySQL.Async.fetchAll('SHOW COLUMNS FROM player_outfits', {}, function(columns)
+            local hasOutfit = false
+            
+            for i=1, #columns do
+                if columns[i].Field == 'outfit' then
+                    hasOutfit = true
+                    break
+                end
+            end
+            
+            -- Add the outfit column if it doesn't exist
+            if not hasOutfit then
+                print("^3[vein-clothing] Adding missing 'outfit' column to player_outfits table^7")
+                MySQL.Async.execute('ALTER TABLE player_outfits ADD COLUMN outfit longtext DEFAULT NULL', {})
+            end
+        end)
+    end)
+    
+    -- Create other tables if they don't exist
+    MySQL.Async.execute([[
+        CREATE TABLE IF NOT EXISTS `player_wishlist` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `citizenid` varchar(50) DEFAULT NULL,
+            `item` varchar(50) DEFAULT NULL,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ]], {})
+    
+    MySQL.Async.execute([[
+        CREATE TABLE IF NOT EXISTS `player_clothing_condition` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `citizenid` varchar(50) DEFAULT NULL,
+            `item` varchar(50) DEFAULT NULL,
+            `condition` int(11) DEFAULT 100,
+            `is_dirty` tinyint(1) DEFAULT 0,
+            `is_damaged` tinyint(1) DEFAULT 0,
+            `last_worn` timestamp NULL DEFAULT NULL,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ]], {})
+    
+    MySQL.Async.execute([[
+        CREATE TABLE IF NOT EXISTS `store_inventory` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `store` varchar(50) DEFAULT NULL,
+            `item` varchar(50) DEFAULT NULL,
+            `stock` int(11) DEFAULT 0,
+            `last_restock` timestamp NULL DEFAULT NULL,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ]], {})
+    
+    print("^2[vein-clothing] Database tables setup complete^7")
+end 

@@ -1,5 +1,30 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
+-- Add this function at the top of the file
+local outfitColumnName = 'outfit' -- Default column name
+
+-- Function to get the correct outfit column name 
+local function GetOutfitColumnName(callback)
+    -- If we already know the column name, use it
+    if outfitColumnName ~= 'outfit' then
+        callback(outfitColumnName)
+        return
+    end
+    
+    -- Otherwise, determine the column name
+    MySQL.Async.fetchAll('SHOW COLUMNS FROM player_outfits', {}, function(columns)
+        for i=1, #columns do
+            local column = columns[i].Field
+            if column == 'outfit' or column == 'outfitdata' or column == 'outfit_data' or column == 'data' then
+                outfitColumnName = column
+                callback(outfitColumnName)
+                return
+            end
+        end
+        callback('outfit') -- Default if no match found
+    end)
+end
+
 -- Get outfit by ID callback
 QBCore.Functions.CreateCallback('vein-clothing:server:getOutfitById', function(source, cb, outfitId)
     local src = source
@@ -200,29 +225,42 @@ RegisterNetEvent('vein-clothing:server:setDefaultOutfit', function(outfitId)
     
     local citizenid = Player.PlayerData.citizenid
     
-    -- Get outfit data
-    MySQL.Async.fetchAll('SELECT * FROM player_outfits WHERE id = ? AND citizenid = ?', {outfitId, citizenid}, function(results)
-        if not results or #results == 0 then
-            TriggerClientEvent('QBCore:Notify', src, "Outfit not found", "error")
-            return
-        end
+    -- Get the correct column name
+    GetOutfitColumnName(function(columnName)
+        -- Reset all outfits to non-default
+        MySQL.Async.execute('UPDATE player_outfits SET is_default = 0 WHERE citizenid = ?', {citizenid})
         
-        local outfitName = results[1].outfitname
-        local outfitData = results[1].outfit
+        -- Set the selected outfit as default
+        MySQL.Async.execute('UPDATE player_outfits SET is_default = 1 WHERE id = ? AND citizenid = ?', 
+            {outfitId, citizenid})
         
-        -- Check if a default outfit already exists
-        MySQL.Async.fetchAll('SELECT * FROM player_outfits WHERE citizenid = ? AND outfitname = ?', {citizenid, "default"}, function(defaultResults)
-            if defaultResults and #defaultResults > 0 then
-                -- Update existing default outfit
-                MySQL.Async.execute('UPDATE player_outfits SET outfit = ? WHERE citizenid = ? AND outfitname = ?', 
-                    {outfitData, citizenid, "default"})
-            else
-                -- Create new default outfit
-                MySQL.Async.execute('INSERT INTO player_outfits (citizenid, outfitname, outfit) VALUES (?, ?, ?)', 
-                    {citizenid, "default", outfitData})
+        -- Get outfit details
+        local query = string.format('SELECT outfitname, %s FROM player_outfits WHERE id = ? AND citizenid = ?', columnName)
+        MySQL.Async.fetchAll(query, {outfitId, citizenid}, function(results)
+            if not results or #results == 0 then
+                TriggerClientEvent('QBCore:Notify', src, "Outfit not found", "error")
+                return
             end
             
-            TriggerClientEvent('QBCore:Notify', src, "Set " .. outfitName .. " as default outfit", "success")
+            local outfitName = results[1].outfitname
+            local outfitData = results[1][columnName]
+            
+            -- Check if a default outfit already exists
+            MySQL.Async.fetchAll('SELECT * FROM player_outfits WHERE citizenid = ? AND outfitname = ?', 
+                {citizenid, "default"}, function(defaultResults)
+                
+                if defaultResults and #defaultResults > 0 then
+                    -- Update existing default outfit
+                    local defaultQuery = string.format('UPDATE player_outfits SET %s = ? WHERE citizenid = ? AND outfitname = ?', columnName)
+                    MySQL.Async.execute(defaultQuery, {outfitData, citizenid, "default"})
+                else
+                    -- Create new default outfit
+                    local defaultInsertQuery = string.format('INSERT INTO player_outfits (citizenid, outfitname, %s) VALUES (?, ?, ?)', columnName)
+                    MySQL.Async.execute(defaultInsertQuery, {citizenid, "default", outfitData})
+                end
+                
+                TriggerClientEvent('QBCore:Notify', src, "Set " .. outfitName .. " as default outfit", "success")
+            end)
         end)
     end)
 end)
@@ -366,6 +404,50 @@ RegisterNetEvent('vein-clothing:server:renameOutfit', function(outfitId, newName
         MySQL.Async.execute('UPDATE player_outfits SET outfitname = ? WHERE id = ? AND citizenid = ?', 
             {newName, outfitId, citizenid}, function()
             TriggerClientEvent('QBCore:Notify', src, "Renamed outfit: " .. oldName .. " -> " .. newName, "success")
+        end)
+    end)
+end)
+
+-- Update the save outfit event handler
+RegisterNetEvent('vein-clothing:server:saveOutfit', function(name, outfitData)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    
+    if not Player then return end
+    
+    local citizenid = Player.PlayerData.citizenid
+    
+    -- Validate input
+    if not name or not outfitData then
+        TriggerClientEvent('QBCore:Notify', src, "Invalid outfit data", "error")
+        return
+    end
+    
+    -- Get the correct column name
+    GetOutfitColumnName(function(columnName)
+        -- Check if outfit name already exists
+        MySQL.Async.fetchAll('SELECT * FROM player_outfits WHERE citizenid = ? AND outfitname = ?', 
+            {citizenid, name}, function(results)
+            
+            if results and #results > 0 then
+                -- Update existing outfit
+                local query = string.format('UPDATE player_outfits SET %s = ? WHERE citizenid = ? AND outfitname = ?', columnName)
+                MySQL.Async.execute(query, {json.encode(outfitData), citizenid, name})
+                TriggerClientEvent('QBCore:Notify', src, "Updated outfit: " .. name, "success")
+            else
+                -- Count existing outfits
+                MySQL.Async.fetchScalar('SELECT COUNT(*) FROM player_outfits WHERE citizenid = ?', {citizenid}, function(count)
+                    if count >= Config.Outfits.MaxOutfits then
+                        TriggerClientEvent('QBCore:Notify', src, "You can only save up to " .. Config.Outfits.MaxOutfits .. " outfits", "error")
+                        return
+                    end
+                    
+                    -- Create new outfit
+                    local query = string.format('INSERT INTO player_outfits (citizenid, outfitname, %s) VALUES (?, ?, ?)', columnName)
+                    MySQL.Async.execute(query, {citizenid, name, json.encode(outfitData)})
+                    TriggerClientEvent('QBCore:Notify', src, "Saved new outfit: " .. name, "success")
+                end)
+            end
         end)
     end)
 end) 
