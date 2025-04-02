@@ -1,8 +1,8 @@
 fx_version 'cerulean'
 game 'gta5'
 
-author 'Your Name'
-description 'Item-Based Clothing System for QB-Core'
+author 'Vein Development'
+description 'Advanced Item-Based Clothing System for QB-Core with Condition System, Multi-Store Support, and Modern UI'
 version '1.0.0'
 
 shared_scripts {
@@ -31,10 +31,22 @@ files {
     'html/js/*.js',
     'html/fonts/*.ttf',
     'html/img/*.png',
-    'html/img/*.jpg'
+    'html/img/*.jpg',
+    'html/img/*.svg'
 }
 
 lua54 'yes'
 
-dependency 'qb-core'
-dependency 'oxmysql' 
+dependencies {
+    'qb-core',
+    'oxmysql',
+    'ox_lib'
+}
+
+escrow_ignore {
+    'config.lua',
+    'locales/*.lua',
+    'client/*.lua',
+    'server/*.lua',
+    'html/*'
+} 
