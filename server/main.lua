@@ -5,6 +5,75 @@ local StoreStock = {}
 local DegradationIntervals = {}
 local NeedsRestock = {}
 
+-- Function to ensure database tables are set up correctly
+function SetupDatabase()
+    -- Check if the player_outfits table needs updates
+    MySQL.Async.execute([[
+        CREATE TABLE IF NOT EXISTS `player_outfits` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `citizenid` varchar(50) DEFAULT NULL,
+            `outfitname` varchar(50) DEFAULT NULL,
+            `outfit` longtext DEFAULT NULL,
+            `is_default` tinyint(1) DEFAULT 0,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ]], {}, function()
+        -- Check if the columns exist
+        MySQL.Async.fetchAll('SHOW COLUMNS FROM player_outfits', {}, function(columns)
+            local hasOutfit = false
+            
+            for i=1, #columns do
+                if columns[i].Field == 'outfit' then
+                    hasOutfit = true
+                    break
+                end
+            end
+            
+            -- Add the outfit column if it doesn't exist
+            if not hasOutfit then
+                print("^3[vein-clothing] Adding missing 'outfit' column to player_outfits table^7")
+                MySQL.Async.execute('ALTER TABLE player_outfits ADD COLUMN outfit longtext DEFAULT NULL', {})
+            end
+        end)
+    end)
+    
+    -- Create other tables if they don't exist
+    MySQL.Async.execute([[
+        CREATE TABLE IF NOT EXISTS `player_wishlist` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `citizenid` varchar(50) DEFAULT NULL,
+            `item` varchar(50) DEFAULT NULL,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ]], {})
+    
+    MySQL.Async.execute([[
+        CREATE TABLE IF NOT EXISTS `player_clothing_condition` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `citizenid` varchar(50) DEFAULT NULL,
+            `item` varchar(50) DEFAULT NULL,
+            `condition` int(11) DEFAULT 100,
+            `is_dirty` tinyint(1) DEFAULT 0,
+            `is_damaged` tinyint(1) DEFAULT 0,
+            `last_worn` timestamp NULL DEFAULT NULL,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ]], {})
+    
+    MySQL.Async.execute([[
+        CREATE TABLE IF NOT EXISTS `store_inventory` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `store` varchar(50) DEFAULT NULL,
+            `item` varchar(50) DEFAULT NULL,
+            `stock` int(11) DEFAULT 0,
+            `last_restock` timestamp NULL DEFAULT NULL,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ]], {})
+    
+    print("^2[vein-clothing] Database tables setup complete^7")
+end
+
 -- Initialize function (called on script start)
 function Initialize()
     -- Set up the database tables first
@@ -809,73 +878,4 @@ end)
 CreateThread(function()
     Wait(2000) -- Wait for everything to load
     Initialize()
-end)
-
--- Function to ensure database tables are set up correctly
-function SetupDatabase()
-    -- Check if the player_outfits table needs updates
-    MySQL.Async.execute([[
-        CREATE TABLE IF NOT EXISTS `player_outfits` (
-            `id` int(11) NOT NULL AUTO_INCREMENT,
-            `citizenid` varchar(50) DEFAULT NULL,
-            `outfitname` varchar(50) DEFAULT NULL,
-            `outfit` longtext DEFAULT NULL,
-            `is_default` tinyint(1) DEFAULT 0,
-            PRIMARY KEY (`id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    ]], {}, function()
-        -- Check if the columns exist
-        MySQL.Async.fetchAll('SHOW COLUMNS FROM player_outfits', {}, function(columns)
-            local hasOutfit = false
-            
-            for i=1, #columns do
-                if columns[i].Field == 'outfit' then
-                    hasOutfit = true
-                    break
-                end
-            end
-            
-            -- Add the outfit column if it doesn't exist
-            if not hasOutfit then
-                print("^3[vein-clothing] Adding missing 'outfit' column to player_outfits table^7")
-                MySQL.Async.execute('ALTER TABLE player_outfits ADD COLUMN outfit longtext DEFAULT NULL', {})
-            end
-        end)
-    end)
-    
-    -- Create other tables if they don't exist
-    MySQL.Async.execute([[
-        CREATE TABLE IF NOT EXISTS `player_wishlist` (
-            `id` int(11) NOT NULL AUTO_INCREMENT,
-            `citizenid` varchar(50) DEFAULT NULL,
-            `item` varchar(50) DEFAULT NULL,
-            PRIMARY KEY (`id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    ]], {})
-    
-    MySQL.Async.execute([[
-        CREATE TABLE IF NOT EXISTS `player_clothing_condition` (
-            `id` int(11) NOT NULL AUTO_INCREMENT,
-            `citizenid` varchar(50) DEFAULT NULL,
-            `item` varchar(50) DEFAULT NULL,
-            `condition` int(11) DEFAULT 100,
-            `is_dirty` tinyint(1) DEFAULT 0,
-            `is_damaged` tinyint(1) DEFAULT 0,
-            `last_worn` timestamp NULL DEFAULT NULL,
-            PRIMARY KEY (`id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    ]], {})
-    
-    MySQL.Async.execute([[
-        CREATE TABLE IF NOT EXISTS `store_inventory` (
-            `id` int(11) NOT NULL AUTO_INCREMENT,
-            `store` varchar(50) DEFAULT NULL,
-            `item` varchar(50) DEFAULT NULL,
-            `stock` int(11) DEFAULT 0,
-            `last_restock` timestamp NULL DEFAULT NULL,
-            PRIMARY KEY (`id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    ]], {})
-    
-    print("^2[vein-clothing] Database tables setup complete^7")
-end 
+end) 

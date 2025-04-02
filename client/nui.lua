@@ -79,7 +79,7 @@ RegisterNUICallback('toggleWishlist', function(data, cb)
             QBCore.Functions.Notify(Lang:t('success.wishlist_added', {QBCore.Shared.Items[itemName].label}), "success")
         end
         
-        cb({success = true, isWishlisted = !isWishlisted})
+        cb({success = true, isWishlisted = not isWishlisted})
     end, itemName)
 end)
 
