@@ -23,19 +23,27 @@ A simple and powerful clothing system for your FiveM server that lets players bu
 ## 🚀 Quick Start Guide
 
 ### 1. Installation
-1. Download the script
-2. Put it in your server's `resources` folder
+1. Download this resource
+2. Place it in your server's `resources` folder
 3. Add `ensure vein-clothing` to your `server.cfg`
-4. Restart your server
 
-### 2. Basic Setup
-1. Open `config.lua` in the script folder
-2. Set `Config.Debug = false` when you're done testing
-3. Make sure you have these installed:
-   - QB-Core
-   - oxmysql
-   - ox_lib
-   - qb-target (optional)
+### 2. Image Setup
+The following clothing item images need to be added to your inventory resource:
+- tshirt_white.png
+- tshirt_black.png
+- jeans_blue.png
+- jeans_black.png
+- sneakers_white.png
+- cap_black.png
+- hoodie_gray.png
+- suit_black.png
+- suit_navy.png
+- dress_shoes_black.png
+- dress_shoes_brown.png
+- luxury_watch.png
+- designer_glasses.png
+
+Place these in your inventory's images folder (usually `qb-inventory/html/images/`).
 
 ### 3. Database Setup
 Run these SQL commands in your database to set up all required tables:
@@ -81,6 +89,20 @@ CREATE TABLE IF NOT EXISTS `store_inventory` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
+
+### 4. Ready-To-Use Clothing Items
+The script comes with the following clothing items already set up and ready to use:
+- **Tops**: tshirt_white, tshirt_black, hoodie_gray, suit_black, suit_navy
+- **Bottoms**: jeans_blue, jeans_black
+- **Shoes**: sneakers_white, dress_shoes_black, dress_shoes_brown
+- **Accessories**: cap_black, luxury_watch, designer_glasses
+
+These items are already defined in your QB-Core shared items file and configured in the clothing system.
+
+### 5. Start Your Server
+1. Make sure all required dependencies are installed (qb-core, oxmysql, ox_lib, qb-target)
+2. Restart your server
+3. Visit clothing stores at the marked locations on the map
 
 ## 🛍️ How to Use
 
@@ -560,105 +582,51 @@ To use a custom inventory system:
 2. Configure all the event names, export functions, and resource names in the Custom section
 3. Ensure your custom inventory system has equivalent functions for all required operations
 
-## 🔢 Adding Items to QB-Core
+## 🔢 Adding More Clothing Items
 
-To make clothing items work with this system, you need to properly define them in your QB-Core shared items. Follow these steps:
+If you want to add more clothing items beyond the pre-configured ones:
 
-### 1. Add Basic Items to QB-Core
-
-Open your `qb-core/shared/items.lua` file and add your clothing items:
-
+1. **Add the item to your QB-Core shared items:**
 ```lua
 -- In qb-core/shared/items.lua
-QBCore.Shared.Items = {
-    -- Existing items...
-    
-    ['tshirt_white'] = {
-        name = 'tshirt_white',
-        label = 'White T-Shirt',
-        weight = 200,
-        type = 'item',
-        image = 'tshirt_white.png', -- Make sure this image exists in your inventory resource
-        unique = true,
-        useable = true,
-        shouldClose = true,
-        combinable = nil,
-        description = 'A simple white t-shirt'
-    },
-    
-    -- Add more clothing items...
-}
+['new_item_name'] = { name = 'new_item_name', label = 'Nice Item Name', weight = 200, type = 'item', image = 'new_item_name.png', unique = true, useable = true, shouldClose = true, combinable = nil, description = 'Description of the item' },
 ```
 
-### 2. Add Client Config Inside Your Clothing Script
-
-Create a file called `shared/items.lua` in your vein-clothing folder with the client configurations:
-
+2. **Add the clothing configuration in shared/items.lua:**
 ```lua
--- In vein-clothing/shared/items.lua
-exports('GetClothingConfig', function()
-    return {
-        ['tshirt_white'] = {
-            category = 'torso2',
-            component = 11,
-            drawable = 0,
-            texture = 0,
-            rarity = 'common'
-        },
-        -- Add more clothing configurations...
-    }
-end)
+-- In vein-clothing/shared/items.lua (inside the exports function)
+['new_item_name'] = {
+    category = 'torso2',       -- Use correct category from Component ID Reference Guide
+    component = 11,            -- Component ID number
+    drawable = 5,              -- GTA V drawable ID
+    texture = 0,               -- GTA V texture ID
+    rarity = 'common',         -- Rarity level affecting price and availability
+    isAddon = false,           -- Set to true for addon clothing
+    type = 'component'         -- Use 'component' for clothing or 'prop' for accessories
+},
 ```
 
-### 3. Initialize Clothing Configuration
-
-Add this to your client/main.lua:
-
-```lua
--- In client/main.lua
-local ClothingConfig = exports['vein-clothing']:GetClothingConfig()
-
--- Function to get clothing config for an item
-function GetClothingConfig(itemName)
-    return ClothingConfig[itemName] or nil
-end
-```
-
-### 4. Update Your Config.lua Store Inventory
-
-Now you can add your properly defined items to the store inventories:
-
+3. **Add the item to a store's inventory in config.lua:**
 ```lua
 -- In config.lua
 Config.Stores = {
     ['suburban'] = {
         -- Other settings...
         inventory = {
-            "tshirt_white", "tshirt_black", "jeans_blue"
-            -- Add more clothing items that exist in your QB-Core
+            -- Existing items...
+            "new_item_name"
         }
     }
 }
 ```
 
-### 5. Example Item List to Get Started
+4. **Add the item image to your inventory resource**
+   - Create an image named `new_item_name.png`
+   - Place it in your inventory's images folder (like `qb-inventory/html/images/`)
 
-Here are some common clothing items you can add:
+5. **Restart your server** to apply the changes
 
-```lua
--- T-shirts
-['tshirt_white'] = { /* item properties */ }
-['tshirt_black'] = { /* item properties */ }
-
--- Pants/Jeans
-['jeans_blue'] = { /* item properties */ }
-['pants_black'] = { /* item properties */ }
-
--- Shoes
-['sneakers_white'] = { /* item properties */ }
-['shoes_black'] = { /* item properties */ }
-
--- Accessories
-['hat_cap'] = { /* item properties */ }
-['glasses_casual'] = { /* item properties */ }
-``` 
+Remember that:
+- Each item must exist in both QB-Core shared items AND vein-clothing's shared/items.lua
+- The item names must match exactly between both files
+- The category must match the component ID (see Component ID Reference Guide) 
