@@ -156,6 +156,169 @@ CREATE TABLE IF NOT EXISTS `player_wishlist` (
 }
 ```
 
+## 👕 Adding Clothes to Stores
+
+### Step 1: Prepare Your Clothing Items
+
+#### For Default GTA Clothing
+1. First, find the clothing item's drawable and texture IDs:
+   - Use a tool like [GTA V Clothing ID Finder](https://gta5mod.net/gta-5-clothing-id-finder/)
+   - Or use the in-game clothing store to find the IDs
+   - Note down the component ID, drawable ID, and texture ID
+
+2. Create the item in your QB-Core shared items:
+```lua
+['tshirt_white'] = {
+    name = 'tshirt_white',
+    label = 'White T-Shirt',
+    weight = 200,
+    type = 'item',
+    image = 'tshirt_white.png',
+    unique = true,
+    useable = true,
+    shouldClose = true,
+    description = 'A simple white t-shirt',
+    client = {
+        category = 'torso',  -- The category it belongs to
+        component = 11,      -- The component ID (11 for torso)
+        drawable = 0,        -- The drawable ID
+        texture = 0,         -- The texture ID
+        rarity = 'common'    -- The rarity level
+    }
+}
+```
+
+#### For Addon Streamed Clothing
+1. Install your addon clothing pack:
+   - Place the .yft and .ytd files in your server's stream folder
+   - Ensure the resource is properly configured in your server.cfg
+   - Test that the models load correctly in-game
+
+2. Create the item in your QB-Core shared items:
+```lua
+['addon_jacket_1'] = {
+    name = 'addon_jacket_1',
+    label = 'Addon Jacket 1',
+    weight = 400,
+    type = 'item',
+    image = 'addon_jacket_1.png',
+    unique = true,
+    useable = true,
+    shouldClose = true,
+    description = 'A cool addon jacket',
+    client = {
+        category = 'torso',      -- The category it belongs to
+        component = 11,          -- The component ID
+        isAddon = true,          -- Mark as addon clothing
+        model = 'addon_jacket_1', -- The model name from your addon pack
+        drawable = 0,            -- The drawable ID
+        texture = 0,             -- The texture ID
+        rarity = 'rare'          -- The rarity level
+    }
+}
+```
+
+### Step 2: Add Items to Store Inventory
+
+1. Open your `config.lua` file
+2. Find the `Config.Stores` section
+3. Add your items to the store's inventory:
+
+```lua
+Config.Stores = {
+    ['suburban'] = {
+        label = "Suburban",
+        blip = {
+            sprite = 73,
+            color = 3,
+            scale = 0.7,
+            label = "Suburban"
+        },
+        clerk = {
+            model = "s_m_m_gentransport",
+            scenario = "WORLD_HUMAN_STAND_IMPATIENT"
+        },
+        priceMultiplier = 1.0,
+        locations = {
+            vector4(127.02, -223.69, 54.56, 68.0)
+        },
+        inventory = {
+            -- Default GTA clothing
+            ['tshirt_white'] = {
+                price = 100,
+                stock = 10,
+                variations = {
+                    {texture = 0, label = "White"},
+                    {texture = 1, label = "Black"}
+                }
+            },
+            -- Addon clothing
+            ['addon_jacket_1'] = {
+                price = 500,
+                stock = 5,
+                variations = {
+                    {texture = 0, label = "Red"},
+                    {texture = 1, label = "Blue"}
+                }
+            }
+        }
+    }
+}
+```
+
+### Step 3: Test Your Configuration
+
+1. Restart your server
+2. Visit the clothing store
+3. Check that:
+   - The items appear in the store inventory
+   - The prices are correct
+   - You can preview the items
+   - You can purchase the items
+   - The items appear correctly on your character
+
+### Troubleshooting Common Issues
+
+#### Default GTA Clothing Issues
+- **Clothing doesn't appear**: Double-check the component, drawable, and texture IDs
+- **Wrong appearance**: Verify the category matches the component ID
+- **Missing textures**: Ensure the texture ID exists for that drawable
+
+#### Addon Clothing Issues
+- **Model doesn't load**: 
+  - Check the model name matches your addon pack
+  - Verify the addon resource is started before vein-clothing
+  - Ensure the .yft and .ytd files are in the correct location
+- **Texture issues**:
+  - Verify the texture IDs exist in your addon pack
+  - Check that the texture files are properly named
+- **Performance issues**:
+  - Optimize your addon models
+  - Use proper LODs
+  - Consider streaming distance
+
+### Best Practices
+
+1. **Organization**:
+   - Group similar items together in the config
+   - Use consistent naming conventions
+   - Document your item IDs and variations
+
+2. **Performance**:
+   - Limit the number of variations per item
+   - Use appropriate rarity levels
+   - Set reasonable stock limits
+
+3. **User Experience**:
+   - Provide clear item labels
+   - Add helpful descriptions
+   - Set appropriate prices based on rarity
+
+4. **Maintenance**:
+   - Keep a backup of your configuration
+   - Document any custom changes
+   - Test thoroughly after updates
+
 ## ⚙️ Configuration
 
 All settings are in `config.lua`. Here are the main things you can change:
