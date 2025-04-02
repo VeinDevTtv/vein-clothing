@@ -122,20 +122,20 @@ CREATE TABLE IF NOT EXISTS `clothing_stores` (
     }
 },
 ['jeans_blue'] = {
-    label = 'Blue Jeans',
-    weight = 400,
-    stack = false,
-    close = true,
-    description = 'Classic blue jeans',
+    label = 'Blue Jeans',      -- Display name shown in inventory and UI
+    weight = 400,              -- Item weight (affects inventory capacity)
+    stack = false,             -- Whether multiple items can stack (clothing should always be false)
+    close = true,              -- Whether inventory should close when item is used
+    description = 'Classic blue jeans',  -- Description shown when hovering item
     client = {
-        category = 'pants',
-        component = 4,
-        rarity = 'common',
-        variations = {
-            {drawable = 0, texture = 0},
-            {drawable = 0, texture = 1}
+        category = 'pants',    -- Clothing category (affects which body component changes)
+        component = 4,         -- GTA component ID (4 = legs/pants)
+        rarity = 'common',     -- Rarity tier (affects price and stock availability)
+        variations = {         -- Different style/color options for this item
+            {drawable = 0, texture = 0},  -- First variation (drawable = GTA model ID, texture = color/pattern) 
+            {drawable = 0, texture = 1}   -- Second variation (same model, different texture)
         },
-        image = 'jeans_blue'
+        image = 'jeans_blue'   -- Inventory image filename (without extension)
     }
 }
 ```
@@ -497,4 +497,85 @@ For support, please join our Discord at [discord.gg/vein-clothing](#)
 
 ## License
 
-This resource is protected under proprietary license. You may not redistribute, share, or resell this resource without explicit permission. 
+This resource is protected under proprietary license. You may not redistribute, share, or resell this resource without explicit permission.
+
+## Item Properties Reference
+
+### Understanding Clothing Item Configuration
+
+Each clothing item in the system needs to be configured with specific properties that determine how it works in-game. Here's a detailed breakdown:
+
+#### Basic Item Properties
+
+| Property | Description |
+|----------|-------------|
+| `label` | The display name shown in inventory and UI interfaces |
+| `weight` | How much inventory weight the item takes up |
+| `stack` | Should always be `false` for clothing items as they're unique |
+| `close` | Whether the inventory should close when the item is used |
+| `description` | Text description shown when hovering over the item |
+
+#### Clothing-Specific Properties (client object)
+
+| Property | Description |
+|----------|-------------|
+| `category` | Defines which type of clothing (tops, pants, etc.) |
+| `component` | GTA V component ID that this item will modify (see Component IDs table) |
+| `prop` | Boolean - if true, this is a prop (hat, glasses) instead of a component |
+| `rarity` | Determines stock levels and price (common, uncommon, rare, exclusive, limited) |
+| `variations` | Array of available styles/colors for this item |
+| `image` | Filename for the inventory image (without file extension) |
+
+#### Variations Array
+
+Each entry in the variations array contains:
+- `drawable`: The GTA drawable ID (model)
+- `texture`: The texture/color variant for that drawable
+
+#### GTA V Component IDs Reference
+
+| Component ID | Description | Category Name |
+|--------------|-------------|--------------|
+| 0 | Face/Head | `head` |
+| 1 | Masks | `masks` |
+| 2 | Hair/Beard | `hair` |
+| 3 | Upper Body/Torso | `torso` |
+| 4 | Legs/Pants | `pants` |
+| 5 | Bags/Parachutes | `bags` |
+| 6 | Shoes/Feet | `shoes` |
+| 7 | Accessories/Neck | `accessories` |
+| 8 | Shirts/Undershirt | `undershirt` |
+| 9 | Body Armor/Vests | `vests` |
+| 10 | Decals/Badges | `decals` |
+| 11 | Jackets/Tops | `tops` |
+
+#### GTA V Prop IDs Reference
+
+| Prop ID | Description | Category Name |
+|---------|-------------|--------------|
+| 0 | Hats/Helmets | `hats` |
+| 1 | Glasses | `glasses` |
+| 2 | Ear accessories | `ears` |
+| 6 | Watches | `watches` |
+| 7 | Bracelets | `bracelets` |
+
+#### Special Notes
+
+1. **Component vs. Prop**:
+   - Components replace an entire body part (e.g., pants, shirts)
+   - Props are added to the character (e.g., hats, glasses)
+   - Props use `prop = true` and their own set of IDs
+
+2. **Finding Drawable and Texture IDs**:
+   - You can find these values using developer tools or clothing menus
+   - Alternatively, use FiveM development resources that list clothing options
+   - Values differ between male and female characters
+
+3. **Clothing Categories**:
+   - These should match the GTA component/prop being modified
+   - Used for organizing items in the UI and wardrobe
+
+4. **Rarity Effects**:
+   - Higher rarity items appear less frequently in stores
+   - They restock slower and have higher price multipliers
+   - Limited items may only appear once per server restart 
