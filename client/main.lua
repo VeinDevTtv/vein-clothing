@@ -378,36 +378,114 @@ RegisterNUICallback('closeUI', function(data, cb)
     cb({success = true})
 end)
 
--- Wear/remove clothing item (used when items are used from inventory)
-RegisterNetEvent('clothing-system:client:wearItem', function(itemData)
-    if not itemData or not itemData.client then return end
+-- Function to handle any type of clothing item
+local function HandleClothingItem(itemData)
+    if not itemData then return false end
     
-    local component = itemData.client.component
-    local drawable = itemData.client.drawable
-    local texture = itemData.client.texture
+    -- Get the component ID based on the category
+    local componentId = GetComponentIdFromCategory(itemData.client.category)
+    if not componentId then return false end
     
-    -- Check if removing or wearing
-    if currentOutfit[component] and currentOutfit[component].name == itemData.name then
-        -- Remove item - set to default clothing
-        SetPedComponentVariation(PlayerPedId(), component, 0, 0, 0)
-        currentOutfit[component] = nil
+    -- Handle different types of clothing
+    if itemData.client.type == 'prop' then
+        -- Handle props (hats, glasses, etc.)
+        local propId = GetPropIdFromCategory(itemData.client.category)
+        if not propId then return false end
         
-        -- Degrade condition slightly when removing (implementation detail)
-        TriggerServerEvent('clothing-system:server:degradeClothing', itemData.name, 0.1)
+        -- Check if the prop exists in the addon
+        if not HasPropLoaded(itemData.client.model) then
+            -- Load the addon prop if needed
+            RequestModel(itemData.client.model)
+            while not HasModelLoaded(itemData.client.model) do
+                Wait(0)
+            end
+        end
+        
+        -- Apply the prop
+        SetPedPropIndex(PlayerPedId(), propId, itemData.client.drawable, itemData.client.texture, true)
     else
-        -- Wear item
-        SetPedComponentVariation(PlayerPedId(), component, drawable, texture, 0)
+        -- Handle regular clothing components
+        if itemData.client.isAddon then
+            -- Handle addon clothing
+            if not HasAddonClothingLoaded(itemData.client.model) then
+                -- Load the addon clothing if needed
+                RequestModel(itemData.client.model)
+                while not HasModelLoaded(itemData.client.model) do
+                    Wait(0)
+                end
+            end
+            
+            -- Apply addon clothing
+            SetPedComponentVariation(PlayerPedId(), componentId, itemData.client.drawable, itemData.client.texture, 0)
+        else
+            -- Handle default GTA clothing
+            SetPedComponentVariation(PlayerPedId(), componentId, itemData.client.drawable, itemData.client.texture, 0)
+        end
+    end
+    
+    return true
+end
+
+-- Helper function to get component ID from category
+function GetComponentIdFromCategory(category)
+    local componentMap = {
+        ['mask'] = 1,
+        ['hair'] = 2,
+        ['torso'] = 3,
+        ['legs'] = 4,
+        ['bag'] = 5,
+        ['shoes'] = 6,
+        ['accessory'] = 7,
+        ['undershirt'] = 8,
+        ['kevlar'] = 9,
+        ['badge'] = 10,
+        ['torso2'] = 11
+    }
+    return componentMap[category]
+end
+
+-- Helper function to get prop ID from category
+function GetPropIdFromCategory(category)
+    local propMap = {
+        ['hat'] = 0,
+        ['glasses'] = 1,
+        ['ear'] = 2,
+        ['watch'] = 6,
+        ['bracelet'] = 7
+    }
+    return propMap[category]
+end
+
+-- Function to check if addon clothing is loaded
+function HasAddonClothingLoaded(model)
+    return HasModelLoaded(model)
+end
+
+-- Function to check if addon prop is loaded
+function HasPropLoaded(model)
+    return HasModelLoaded(model)
+end
+
+-- Update the wear item event handler
+RegisterNetEvent('clothing-system:client:wearItem', function(itemData)
+    if not itemData then return end
+    
+    local success = HandleClothingItem(itemData)
+    if success then
+        -- Update the current outfit
+        currentOutfit[itemData.client.category] = itemData
         
-        -- Update current outfit
-        currentOutfit[component] = {
-            name = itemData.name,
-            drawable = drawable,
-            texture = texture,
-            variation = 0
-        }
+        -- Trigger degradation
+        TriggerServerEvent('clothing-system:server:degradeClothing', itemData.name, Config.Condition.WornDegradationMin)
         
-        -- Degrade condition when wearing
-        TriggerServerEvent('clothing-system:server:degradeClothing', itemData.name, Config.Condition.degradePerUse)
+        -- Show notification
+        if Config.Notifications.Enable then
+            QBCore.Functions.Notify('You are now wearing ' .. itemData.label, 'success', Config.Notifications.Duration)
+        end
+    else
+        if Config.Notifications.Enable then
+            QBCore.Functions.Notify('Failed to wear ' .. itemData.label, 'error', Config.Notifications.Duration)
+        end
     end
 end)
 
