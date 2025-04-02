@@ -455,6 +455,18 @@ A: Copy an existing store in `config.lua` and change its settings
 - Verify the database tables are created
 - For addon clothing, ensure the model is properly loaded
 
+### Problem: Error "attempt to index a nil value (field '?')" in server/main.lua
+This error typically occurs when:
+1. An item in your Config.Stores.inventory doesn't exist in QBCore.Shared.Items
+2. The rarity system is trying to access a non-existent rarity type
+3. There's a mismatch between config values and actual items
+
+To fix this:
+- Ensure all items in your store inventory are defined in your QB-Core shared items
+- Check that every clothing item has a valid rarity that exists in Config.Rarity
+- Make sure your items have the proper client configuration (category, drawable, texture)
+- Restart the resource after making changes to the config
+
 ### Problem: Can't save outfits
 - Check if the database tables are created
 - Make sure you have less than 10 saved outfits

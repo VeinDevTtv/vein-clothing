@@ -22,16 +22,29 @@ function InitializeStoreStock()
         
         -- Initialize stock based on config
         for _, itemName in ipairs(storeData.inventory) do
-            -- Set initial stock
-            local rarity = QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.rarity or "common"
-            local maxStock = Config.Rarity[rarity].maxStock or 10
-            
-            StoreStock[storeType][itemName] = {
-                stock = math.random(1, maxStock),
-                maxStock = maxStock,
-                rarity = rarity,
-                lastRestock = os.time()
-            }
+            -- Check if the item exists in QBCore.Shared.Items
+            if QBCore.Shared.Items[itemName] then
+                -- Get rarity with proper nil checking
+                local rarity = "common"
+                if QBCore.Shared.Items[itemName].client then
+                    rarity = QBCore.Shared.Items[itemName].client.rarity or "common"
+                end
+                
+                -- Check if Config.Rarity[rarity] exists and get maxStock
+                local maxStock = 10
+                if Config.Rarity[rarity] then
+                    maxStock = Config.Rarity[rarity].maxStock or 10
+                end
+                
+                StoreStock[storeType][itemName] = {
+                    stock = math.random(1, maxStock),
+                    maxStock = maxStock,
+                    rarity = rarity,
+                    lastRestock = os.time()
+                }
+            else
+                print("^1[ERROR] Item not found in QBCore.Shared.Items: " .. itemName .. "^7")
+            end
         end
         
         NeedsRestock[storeType] = false
@@ -313,10 +326,92 @@ function RestockStore(storeType)
     NeedsRestock[storeType] = false
 end
 
--- Restock all stores
+-- Restock stores
 function RestockStores()
-    for storeType, _ in pairs(StoreStock) do
-        RestockStore(storeType)
+    for storeType, items in pairs(StoreStock) do
+        -- Determine how many items to restock
+        local itemsToRestock = math.random(Config.Restocking.MinItems, Config.Restocking.MaxItems)
+        local restocked = 0
+        
+        -- Restock random items
+        if not Config.Restocking.RestockAll then
+            -- Create a list of items to potentially restock
+            local restockCandidates = {}
+            for itemName, stockData in pairs(items) do
+                if stockData.stock < stockData.maxStock then
+                    table.insert(restockCandidates, {
+                        name = itemName,
+                        data = stockData
+                    })
+                end
+            end
+            
+            -- Shuffle the candidates
+            for i = #restockCandidates, 2, -1 do
+                local j = math.random(i)
+                restockCandidates[i], restockCandidates[j] = restockCandidates[j], restockCandidates[i]
+            end
+            
+            -- Restock up to itemsToRestock items
+            for i = 1, math.min(itemsToRestock, #restockCandidates) do
+                local item = restockCandidates[i]
+                local itemName = item.name
+                
+                -- Make sure the item exists in QBCore
+                if QBCore.Shared.Items[itemName] then
+                    -- Get rarity with proper nil checking
+                    local rarity = "common"
+                    if QBCore.Shared.Items[itemName].client then
+                        rarity = QBCore.Shared.Items[itemName].client.rarity or "common"
+                    end
+                    
+                    -- Check if Config.Rarity[rarity] exists
+                    if Config.Rarity[rarity] then
+                        local minRestock = Config.Rarity[rarity].minRestock or 1
+                        local maxRestock = Config.Rarity[rarity].maxRestock or 3
+                        local amountToRestock = math.random(minRestock, maxRestock)
+                        
+                        StoreStock[storeType][itemName].stock = math.min(
+                            StoreStock[storeType][itemName].stock + amountToRestock,
+                            StoreStock[storeType][itemName].maxStock
+                        )
+                        restocked = restocked + 1
+                    end
+                end
+            end
+        else
+            -- Restock all items
+            for itemName, stockData in pairs(items) do
+                if stockData.stock < stockData.maxStock then
+                    -- Make sure the item exists in QBCore
+                    if QBCore.Shared.Items[itemName] then
+                        -- Get rarity with proper nil checking
+                        local rarity = "common"
+                        if QBCore.Shared.Items[itemName].client then
+                            rarity = QBCore.Shared.Items[itemName].client.rarity or "common"
+                        end
+                        
+                        -- Check if Config.Rarity[rarity] exists
+                        if Config.Rarity[rarity] then
+                            local minRestock = Config.Rarity[rarity].minRestock or 1
+                            local maxRestock = Config.Rarity[rarity].maxRestock or 3
+                            local amountToRestock = math.random(minRestock, maxRestock)
+                            
+                            StoreStock[storeType][itemName].stock = math.min(
+                                StoreStock[storeType][itemName].stock + amountToRestock,
+                                StoreStock[storeType][itemName].maxStock
+                            )
+                            restocked = restocked + 1
+                        end
+                    end
+                end
+            end
+        end
+        
+        -- Print debug information
+        if Config.Debug then
+            print("^2[INFO] Restocked " .. restocked .. " items for store: " .. storeType .. "^7")
+        end
     end
 end
 
@@ -641,4 +736,36 @@ RegisterNetEvent('vein-clothing:server:degradeClothing', function(item, amount)
     
     -- Update clothing condition in database
     UpdateClothingCondition(citizenid, item, amount)
+end)
+
+-- Main Initialize function - called when resource starts
+AddEventHandler('onResourceStart', function(resourceName)
+    if GetCurrentResourceName() ~= resourceName then return end
+    
+    print("^2[vein-clothing] Initializing clothing system...^7")
+    
+    -- Wait for QB-Core to fully load
+    Wait(1000)
+    
+    -- Initialize the clothing system
+    Initialize()
+    
+    print("^2[vein-clothing] Clothing system initialized successfully!^7")
+end)
+
+-- Handle resource stopping
+AddEventHandler('onResourceStop', function(resourceName)
+    if GetCurrentResourceName() ~= resourceName then return end
+    
+    print("^3[vein-clothing] Clothing system shutting down...^7")
+    
+    -- Save any persistent data here if needed
+    
+    print("^3[vein-clothing] Clothing system shutdown complete.^7")
+end)
+
+-- Call Initialize manually to ensure it runs
+CreateThread(function()
+    Wait(2000) -- Wait for everything to load
+    Initialize()
 end) 
