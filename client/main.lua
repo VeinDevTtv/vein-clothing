@@ -466,7 +466,63 @@ function HasPropLoaded(model)
     return HasModelLoaded(model)
 end
 
--- Update the wear item event handler
+-- Function to handle inventory interactions based on config
+function HandleInventory(action, ...)
+    local args = {...}
+    local inventoryType = Config.Inventory.Type
+    
+    if action == 'notification' then
+        local item, type, qty = args[1], args[2], args[3] or 1
+        if inventoryType == 'qb-inventory' then
+            TriggerEvent('inventory:client:ItemBox', QBCore.Shared.Items[item], type, qty)
+        elseif inventoryType == 'ox_inventory' then
+            local title = type == 'add' and 'Item Added' or 'Item Removed'
+            exports.ox_inventory:notify({
+                title = title,
+                description = QBCore.Shared.Items[item].label .. ' x' .. qty,
+                type = type == 'add' and 'success' or 'error'
+            })
+        elseif inventoryType == 'custom' then
+            -- Custom inventory notification
+            TriggerEvent(Config.Inventory.Custom.TriggerEvent, item, type, qty)
+        end
+    elseif action == 'hasItem' then
+        local item, amount = args[1], args[2] or 1
+        if inventoryType == 'qb-inventory' then
+            return QBCore.Functions.HasItem(item, amount)
+        elseif inventoryType == 'ox_inventory' then
+            return exports.ox_inventory:GetItemCount(item) >= amount
+        elseif inventoryType == 'custom' then
+            -- Custom inventory check
+            return exports[Config.Inventory.Custom.ResourceName][Config.Inventory.Custom.HasItem](item, amount)
+        end
+    end
+end
+
+-- Function to show notifications based on config
+function ShowNotification(message, type, duration)
+    local notifType = Config.Notifications.Type
+    duration = duration or Config.Notifications.Duration
+    
+    if not Config.Notifications.Enable then return end
+    
+    if notifType == 'qb' then
+        QBCore.Functions.Notify(message, type, duration)
+    elseif notifType == 'ox' then
+        lib.notify({
+            title = type == 'success' and 'Success' or (type == 'error' and 'Error' or 'Info'),
+            description = message,
+            type = type,
+            position = Config.Notifications.Position,
+            duration = duration
+        })
+    elseif notifType == 'custom' then
+        -- Add support for custom notification systems
+        TriggerEvent('your-custom-notification', message, type, duration)
+    end
+end
+
+-- Update existing code to use the new functions
 RegisterNetEvent('clothing-system:client:wearItem', function(itemData)
     if not itemData then return end
     
@@ -479,13 +535,10 @@ RegisterNetEvent('clothing-system:client:wearItem', function(itemData)
         TriggerServerEvent('clothing-system:server:degradeClothing', itemData.name, Config.Condition.WornDegradationMin)
         
         -- Show notification
-        if Config.Notifications.Enable then
-            QBCore.Functions.Notify('You are now wearing ' .. itemData.label, 'success', Config.Notifications.Duration)
-        end
+        ShowNotification('You are now wearing ' .. itemData.label, 'success')
+        HandleInventory('notification', itemData.name, 'remove', 1)
     else
-        if Config.Notifications.Enable then
-            QBCore.Functions.Notify('Failed to wear ' .. itemData.label, 'error', Config.Notifications.Duration)
-        end
+        ShowNotification('Failed to wear ' .. itemData.label, 'error')
     end
 end)
 

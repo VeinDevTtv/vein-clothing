@@ -532,4 +532,113 @@ exports('getAllClothing', function()
     end
     
     return clothing
+end)
+
+-- Function to handle server-side inventory operations based on config
+function HandleInventory(action, ...)
+    local args = {...}
+    local inventoryType = Config.Inventory.Type
+    local source = args[1]
+    
+    if action == 'addItem' then
+        local item, amount, metadata = args[2], args[3] or 1, args[4] or nil
+        if inventoryType == 'qb-inventory' then
+            return exports['qb-core']:GetCoreObject().Functions.AddItem(source, item, amount, metadata)
+        elseif inventoryType == 'ox_inventory' then
+            return exports.ox_inventory:AddItem(source, item, amount, metadata)
+        elseif inventoryType == 'custom' then
+            -- Custom inventory add item
+            return exports[Config.Inventory.ResourceName][Config.Inventory.Custom.AddItem](source, item, amount, metadata)
+        end
+    elseif action == 'removeItem' then
+        local item, amount, metadata = args[2], args[3] or 1, args[4] or nil
+        if inventoryType == 'qb-inventory' then
+            return exports['qb-core']:GetCoreObject().Functions.RemoveItem(source, item, amount, metadata)
+        elseif inventoryType == 'ox_inventory' then
+            return exports.ox_inventory:RemoveItem(source, item, amount, metadata)
+        elseif inventoryType == 'custom' then
+            -- Custom inventory remove item
+            return exports[Config.Inventory.ResourceName][Config.Inventory.Custom.RemoveItem](source, item, amount, metadata)
+        end
+    elseif action == 'getItem' then
+        local item = args[2]
+        if inventoryType == 'qb-inventory' then
+            return exports['qb-core']:GetCoreObject().Shared.Items[item]
+        elseif inventoryType == 'ox_inventory' then
+            return exports.ox_inventory:Items()[item]
+        elseif inventoryType == 'custom' then
+            -- Custom inventory get item
+            return exports[Config.Inventory.ResourceName][Config.Inventory.Custom.GetItemLabel](item)
+        end
+    elseif action == 'hasItem' then
+        local item, amount = args[2], args[3] or 1
+        if inventoryType == 'qb-inventory' then
+            return exports['qb-core']:GetCoreObject().Functions.HasItem(source, item, amount)
+        elseif inventoryType == 'ox_inventory' then
+            return exports.ox_inventory:GetItemCount(source, item) >= amount
+        elseif inventoryType == 'custom' then
+            -- Custom inventory check
+            return exports[Config.Inventory.ResourceName][Config.Inventory.Custom.HasItem](source, item, amount)
+        end
+    end
+    
+    return false
+end
+
+-- Function to check if player can afford an item
+function CanPlayerAfford(source, price)
+    local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return false end
+    
+    local money = Player.Functions.GetMoney('cash')
+    return money >= price
+end
+
+-- Function to remove money from player
+function RemovePlayerMoney(source, amount)
+    local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return false end
+    
+    Player.Functions.RemoveMoney('cash', amount)
+    return true
+end
+
+-- Update existing callbacks and events to use the new functions
+QBCore.Functions.CreateCallback('clothing-system:server:buyItem', function(source, cb, item, price, storeId)
+    if not CanPlayerAfford(source, price) then
+        TriggerClientEvent('QBCore:Notify', source, "You don't have enough money", 'error')
+        cb(false)
+        return
+    end
+    
+    -- Remove money from player
+    RemovePlayerMoney(source, price)
+    
+    -- Add item to player's inventory
+    local success = HandleInventory('addItem', source, item, 1)
+    if success then
+        -- Update store stock
+        UpdateStoreStock(storeId, item, -1)
+        cb(true)
+    else
+        -- Refund player if item couldn't be added
+        local Player = QBCore.Functions.GetPlayer(source)
+        Player.Functions.AddMoney('cash', price)
+        cb(false)
+    end
+end)
+
+-- Example of updated event handler
+RegisterNetEvent('clothing-system:server:degradeClothing', function(item, amount)
+    local src = source
+    if not item or not amount then return end
+    
+    -- Get player identifier
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+    
+    local citizenid = Player.PlayerData.citizenid
+    
+    -- Update clothing condition in database
+    UpdateClothingCondition(citizenid, item, amount)
 end) 

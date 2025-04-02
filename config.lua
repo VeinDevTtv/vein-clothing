@@ -5,7 +5,7 @@ Config = {}
     GENERAL SETTINGS
     These settings control the basic functionality of the clothing system
 ]]
-Config.Debug = false -- Enable debug mode for development
+Config.Debug = true -- Enable debug mode for development
 Config.UseOxLib = true -- Enable ox_lib integration for enhanced features
 Config.UseOxInventory = true -- Set to true if using ox_inventory, false for QB-Core inventory
 Config.UseTarget = true -- Enable qb-target integration for interactions
@@ -16,17 +16,37 @@ Config.DefaultInteractKey = 38 -- Default key for interactions (E key)
     Configure how the script interacts with your inventory system
 ]]
 Config.Inventory = {
-    -- Set to true if using ox_inventory, false for QB-Core inventory
-    UseOxInventory = true,
+    Type = 'qb-inventory', -- Options: 'qb-inventory', 'ox_inventory', 'qs-inventory', 'custom'
     
-    -- The name of your inventory resource
-    ResourceName = 'ox_inventory',
+    -- QB-Inventory Settings (default)
+    QB = {
+        TriggerEvent = 'inventory:client:ItemBox',
+        OpenInventory = 'inventory:server:OpenInventory',
+        HasItem = 'QBCore.Functions.HasItem',
+        AddItem = 'QBCore.Functions.AddItem',
+        RemoveItem = 'QBCore.Functions.RemoveItem',
+        GetItemLabel = 'QBCore.Shared.Items'
+    },
     
-    -- The name of your core framework
-    CoreName = 'qb-core',
+    -- ox_inventory Settings
+    Ox = {
+        TriggerEvent = 'ox_inventory:notify',
+        OpenInventory = 'ox_inventory:openInventory',
+        HasItem = 'ox_inventory:hasItem',
+        AddItem = 'ox_inventory:addItem',
+        RemoveItem = 'ox_inventory:removeItem',
+        GetItemLabel = 'ox_inventory:getItem'
+    },
     
-    -- The name of your database resource
-    DatabaseName = 'oxmysql'
+    -- Custom inventory settings
+    Custom = {
+        TriggerEvent = 'your-inventory:notify',
+        OpenInventory = 'your-inventory:openInventory',
+        HasItem = 'your-inventory:hasItem',
+        AddItem = 'your-inventory:addItem',
+        RemoveItem = 'your-inventory:removeItem',
+        GetItemLabel = 'your-inventory:getItem'
+    }
 }
 
 --[[

@@ -455,4 +455,70 @@ If you need help:
 
 ## 📜 License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🔄 Inventory System Compatibility
+
+The Vein Clothing System is designed to work with multiple inventory systems. By default, it works with `qb-inventory`, but you can easily configure it to work with other inventory systems like `ox_inventory` or your custom inventory.
+
+### Supported Inventory Systems
+
+- **QB-Inventory** - Default configuration
+- **ox_inventory** - Full support for ox_inventory functions
+- **Custom Inventory** - Configurable for any custom inventory system
+
+### Configuring Your Inventory System
+
+To change or configure your inventory system, open `config.lua` and modify the `Config.Inventory` section:
+
+```lua
+Config.Inventory = {
+    Type = 'qb-inventory', -- Options: 'qb-inventory', 'ox_inventory', 'custom'
+    
+    -- QB-Inventory Settings (default)
+    QB = {
+        TriggerEvent = 'inventory:client:ItemBox',
+        OpenInventory = 'inventory:server:OpenInventory',
+        HasItem = 'QBCore.Functions.HasItem',
+        AddItem = 'QBCore.Functions.AddItem',
+        RemoveItem = 'QBCore.Functions.RemoveItem',
+        GetItemLabel = 'QBCore.Shared.Items'
+    },
+    
+    -- ox_inventory Settings
+    Ox = {
+        TriggerEvent = 'ox_inventory:notify',
+        OpenInventory = 'ox_inventory:openInventory',
+        HasItem = 'ox_inventory:hasItem',
+        AddItem = 'ox_inventory:addItem',
+        RemoveItem = 'ox_inventory:removeItem',
+        GetItemLabel = 'ox_inventory:getItem'
+    },
+    
+    -- Custom inventory settings
+    Custom = {
+        TriggerEvent = 'your-inventory:notify',
+        OpenInventory = 'your-inventory:openInventory',
+        HasItem = 'your-inventory:hasItem',
+        AddItem = 'your-inventory:addItem',
+        RemoveItem = 'your-inventory:removeItem',
+        GetItemLabel = 'your-inventory:getItem'
+    }
+}
+```
+
+### Switching to ox_inventory
+
+To use ox_inventory:
+
+1. Set `Config.Inventory.Type = 'ox_inventory'`
+2. Ensure you have ox_inventory properly installed
+3. Check that your items are properly defined in ox_inventory's items.lua
+
+### Using a Custom Inventory
+
+To use a custom inventory system:
+
+1. Set `Config.Inventory.Type = 'custom'`
+2. Configure all the event names, export functions, and resource names in the Custom section
+3. Ensure your custom inventory system has equivalent functions for all required operations 
