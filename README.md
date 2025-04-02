@@ -158,6 +158,43 @@ CREATE TABLE IF NOT EXISTS `player_wishlist` (
 
 ## 👕 Adding Clothes to Stores
 
+### Component ID Reference Guide
+
+When adding clothing items, you'll need to know which component ID to use. Here's a complete reference:
+
+| Component ID | Category     | Description                          |
+|--------------|--------------|--------------------------------------|
+| 1            | mask         | Masks and face coverings             |
+| 2            | hair         | Hairstyles and hair accessories      |
+| 3            | torso        | Torso clothing (shirts, jackets)     |
+| 4            | legs         | Pants, shorts, and leg wear          |
+| 5            | bag          | Backpacks and bags                   |
+| 6            | shoes        | Footwear                             |
+| 7            | accessory    | Accessories like ties and scarves    |
+| 8            | undershirt   | Undershirts and base layers          |
+| 9            | kevlar       | Body armor and protective gear       |
+| 10           | badge        | Badges and insignias                 |
+| 11           | torso2       | Additional torso layers (coats, etc.)|
+
+#### Example Usage:
+```lua
+-- For a mask
+client = {
+    category = 'mask',  -- Use the category name
+    component = 1,      -- Use the component ID
+    drawable = 0,
+    texture = 0
+}
+
+-- For a jacket
+client = {
+    category = 'torso',  -- Use the category name
+    component = 3,       -- Use the component ID
+    drawable = 0,
+    texture = 0
+}
+```
+
 ### Step 1: Prepare Your Clothing Items
 
 #### For Default GTA Clothing
