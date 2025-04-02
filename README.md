@@ -38,8 +38,10 @@ A simple and powerful clothing system for your FiveM server that lets players bu
    - qb-target (optional)
 
 ### 3. Database Setup
-Run this SQL command in your database:
+Run these SQL commands in your database to set up all required tables:
+
 ```sql
+-- Table for storing player outfits
 CREATE TABLE IF NOT EXISTS `player_outfits` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `citizenid` varchar(50) DEFAULT NULL,
@@ -49,10 +51,33 @@ CREATE TABLE IF NOT EXISTS `player_outfits` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Table for storing player wishlist items
 CREATE TABLE IF NOT EXISTS `player_wishlist` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `citizenid` varchar(50) DEFAULT NULL,
   `item` varchar(50) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Table for storing clothing condition data
+CREATE TABLE IF NOT EXISTS `player_clothing_condition` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `citizenid` varchar(50) DEFAULT NULL,
+  `item` varchar(50) DEFAULT NULL,
+  `condition` int(11) DEFAULT 100,
+  `is_dirty` tinyint(1) DEFAULT 0,
+  `is_damaged` tinyint(1) DEFAULT 0,
+  `last_worn` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Table for storing store inventory
+CREATE TABLE IF NOT EXISTS `store_inventory` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `store` varchar(50) DEFAULT NULL,
+  `item` varchar(50) DEFAULT NULL,
+  `stock` int(11) DEFAULT 0,
+  `last_restock` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
