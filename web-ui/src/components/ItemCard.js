@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './ItemCard.css'; // We'll need to create this CSS file
 
-const ItemCard = ({ item, onPurchase, onPreview }) => {
+const ItemCard = ({ item, onPurchase, onPreview, onWishlist, isWishlisted = false }) => {
   const [selectedVariation, setSelectedVariation] = useState(0);
   
   // Extract item properties (in a real implementation, these would come from the item object)
@@ -57,6 +57,13 @@ const ItemCard = ({ item, onPurchase, onPreview }) => {
         {rarity !== 'common' && (
           <div className="item-badge">{rarity}</div>
         )}
+        <button 
+          className={`wishlist-btn ${isWishlisted ? 'active' : ''}`} 
+          onClick={() => onWishlist && onWishlist(item)}
+          title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+        >
+          <span className="wishlist-icon">♥</span>
+        </button>
       </div>
       
       <div className="item-details">
