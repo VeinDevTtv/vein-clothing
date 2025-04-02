@@ -28,10 +28,12 @@ RegisterNetEvent('clothing-system:client:applyOutfit', function(outfitItems)
         }
         
         -- Degrade condition slightly when wearing
-        TriggerServerEvent('clothing-system:server:degradeClothing', item.name, Config.Condition.degradePerUse / 2)
+        TriggerServerEvent('clothing-system:server:degradeClothing', item.name, Config.Condition.WornDegradationMin)
     end
     
-    QBCore.Functions.Notify("Outfit applied", "success")
+    if Config.Notifications.Enable then
+        QBCore.Functions.Notify("Outfit applied", "success", Config.Notifications.Duration)
+    end
 end)
 
 -- Reset player appearance to default (used when applying full outfits)
@@ -82,7 +84,9 @@ exports('wearOutfit', function(outfitId)
         if outfit then
             TriggerEvent('clothing-system:client:applyOutfit', outfit.items)
         else
-            QBCore.Functions.Notify("Outfit not found", "error")
+            if Config.Notifications.Enable then
+                QBCore.Functions.Notify("Outfit not found", "error", Config.Notifications.Duration)
+            end
         end
     end, outfitId)
 end)
@@ -92,7 +96,9 @@ exports('previewClothing', function(itemName, variation)
     local item = QBCore.Shared.Items[itemName]
     
     if not item or not item.client then
-        QBCore.Functions.Notify("Invalid clothing item", "error")
+        if Config.Notifications.Enable then
+            QBCore.Functions.Notify("Invalid clothing item", "error", Config.Notifications.Duration)
+        end
         return
     end
     
@@ -111,7 +117,9 @@ exports('previewClothing', function(itemName, variation)
         SetPedPropIndex(PlayerPedId(), component, drawable, texture, true)
     end
     
-    QBCore.Functions.Notify("Previewing " .. item.label, "primary")
+    if Config.Notifications.Enable then
+        QBCore.Functions.Notify("Previewing " .. item.label, "primary", Config.Notifications.Duration)
+    end
 end)
 
 -- Event to synchronize player clothing with server/inventory on respawn
@@ -152,11 +160,13 @@ RegisterNetEvent('inventory:client:ItemBox', function(itemData, type)
     -- Check if it's a clothing item
     if type == 'add' and itemData.name and QBCore.Shared.Items[itemData.name] and QBCore.Shared.Items[itemData.name].client and QBCore.Shared.Items[itemData.name].client.category then
         -- Notify player about new clothing
-        QBCore.Functions.Notify(Lang:t('info.new_clothing_item', {item = itemData.label}), 'primary')
-        
-        -- Suggestion to try it on
-        if not isPreviewing then
-            QBCore.Functions.Notify(Lang:t('info.try_on_suggestion', {command = "/try " .. itemData.name}), 'primary')
+        if Config.Notifications.Enable then
+            QBCore.Functions.Notify(Lang:t('info.new_clothing_item', {item = itemData.label}), 'primary', Config.Notifications.Duration)
+            
+            -- Suggestion to try it on
+            if not isPreviewing then
+                QBCore.Functions.Notify(Lang:t('info.try_on_suggestion', {command = "/try " .. itemData.name}), 'primary', Config.Notifications.Duration)
+            end
         end
     elseif type == "remove" then
         -- Item removed - check if it's currently worn and remove if so
@@ -185,7 +195,9 @@ RegisterNetEvent('clothing-system:client:itemPurchased', function(itemName, stor
     if not item then return end
     
     -- Notify of purchase
-    QBCore.Functions.Notify(Lang:t('success.purchased', {itemName = item.label, store = storeName}), 'success')
+    if Config.Notifications.Enable then
+        QBCore.Functions.Notify(Lang:t('success.purchased', {itemName = item.label, store = storeName}), 'success', Config.Notifications.Duration)
+    end
     
     -- Ask if player wants to try it on
     SendNUIMessage({
@@ -194,7 +206,9 @@ RegisterNetEvent('clothing-system:client:itemPurchased', function(itemName, stor
             title = Lang:t('ui.try_on_title'),
             message = Lang:t('ui.try_on_message', {itemName = item.label}),
             accept = Lang:t('ui.try_on'),
-            decline = Lang:t('ui.no_thanks')
+            decline = Lang:t('ui.no_thanks'),
+            theme = Config.UI.Theme,
+            language = Config.UI.Language
         }
     })
     
@@ -217,10 +231,12 @@ RegisterNetEvent('clothing-system:client:clothingDamaged', function(itemName, ne
     if not itemName or not newCondition then return end
     
     -- Only notify if it's a significant decrease or if it reached a threshold
-    if newCondition <= 25 and newCondition > 10 then
-        QBCore.Functions.Notify(Lang:t('condition.poor', {item = QBCore.Shared.Items[itemName].label}), 'primary')
-    elseif newCondition <= 10 then
-        QBCore.Functions.Notify(Lang:t('condition.terrible', {item = QBCore.Shared.Items[itemName].label}), 'error')
+    if Config.Notifications.Enable then
+        if newCondition <= Config.Condition.DamagedThreshold and newCondition > Config.Condition.DirtyThreshold then
+            QBCore.Functions.Notify(Lang:t('condition.poor', {item = QBCore.Shared.Items[itemName].label}), 'primary', Config.Notifications.Duration)
+        elseif newCondition <= Config.Condition.DirtyThreshold then
+            QBCore.Functions.Notify(Lang:t('condition.terrible', {item = QBCore.Shared.Items[itemName].label}), 'error', Config.Notifications.Duration)
+        end
     end
     
     -- Update the current outfit if the item is worn
@@ -237,7 +253,9 @@ end)
 RegisterNetEvent('clothing-system:client:clothingCleaned', function(itemName)
     if not itemName then return end
     
-    QBCore.Functions.Notify(Lang:t('success.cleaned', {item = QBCore.Shared.Items[itemName].label}), 'success')
+    if Config.Notifications.Enable then
+        QBCore.Functions.Notify(Lang:t('success.cleaned', {item = QBCore.Shared.Items[itemName].label}), 'success', Config.Notifications.Duration)
+    end
     
     -- Update the current outfit if the item is worn
     for i, item in pairs(currentOutfit) do

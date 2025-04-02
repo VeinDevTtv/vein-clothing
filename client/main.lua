@@ -56,8 +56,6 @@ end)
 
 -- Create store blips on map
 function LoadClothingBlips()
-    if not Config.EnableBlips then return end
-    
     for storeName, storeData in pairs(Config.Stores) do
         if storeData.blip then
             for _, location in ipairs(storeData.locations) do
@@ -67,7 +65,7 @@ function LoadClothingBlips()
                 SetBlipScale(blip, storeData.blip.scale)
                 SetBlipAsShortRange(blip, true)
                 BeginTextCommandSetBlipName("STRING")
-                AddTextComponentString(storeData.label)
+                AddTextComponentString(storeData.blip.label)
                 EndTextCommandSetBlipName(blip)
             end
         end
@@ -75,58 +73,49 @@ function LoadClothingBlips()
     
     -- Create laundromat blips
     for _, location in ipairs(Config.Laundromats) do
-        local blip = AddBlipForCoord(location.x, location.y, location.z)
-        SetBlipSprite(blip, 362)  -- Laundromat sprite
-        SetBlipColour(blip, 17)   -- Blue color
-        SetBlipScale(blip, 0.6)
+        local blip = AddBlipForCoord(location.coords.x, location.coords.y, location.coords.z)
+        SetBlipSprite(blip, location.blip.sprite)
+        SetBlipColour(blip, location.blip.color)
+        SetBlipScale(blip, location.blip.scale)
         SetBlipAsShortRange(blip, true)
         BeginTextCommandSetBlipName("STRING")
-        AddTextComponentString("Laundromat")
+        AddTextComponentString(location.blip.label)
         EndTextCommandSetBlipName(blip)
     end
     
     -- Create tailor blips
-    for _, location in ipairs(Config.TailorShops) do
-        local blip = AddBlipForCoord(location.x, location.y, location.z)
-        SetBlipSprite(blip, 366)  -- Scissors sprite
-        SetBlipColour(blip, 4)    -- Red color
-        SetBlipScale(blip, 0.6)
+    for _, location in ipairs(Config.Tailors) do
+        local blip = AddBlipForCoord(location.coords.x, location.coords.y, location.coords.z)
+        SetBlipSprite(blip, location.blip.sprite)
+        SetBlipColour(blip, location.blip.color)
+        SetBlipScale(blip, location.blip.scale)
         SetBlipAsShortRange(blip, true)
         BeginTextCommandSetBlipName("STRING")
-        AddTextComponentString("Tailor Shop")
+        AddTextComponentString(location.blip.label)
         EndTextCommandSetBlipName(blip)
     end
 end
 
 -- Create store clerk peds
 function LoadPeds()
-    local pedModels = {
-        ["suburban"] = "s_f_y_shop_mid",
-        ["ponsonbys"] = "s_m_y_shop_high",
-        ["binco"] = "s_f_y_shop_low",
-        ["underground"] = "a_m_y_hipster_02"
-    }
-    
     for storeName, storeData in pairs(Config.Stores) do
-        local model = pedModels[storeName] or "s_f_y_shop_mid"
-        
         for _, location in ipairs(storeData.locations) do
             local ped = nil
             
-            RequestModel(GetHashKey(model))
-            while not HasModelLoaded(GetHashKey(model)) do
+            RequestModel(GetHashKey(storeData.clerk.model))
+            while not HasModelLoaded(GetHashKey(storeData.clerk.model)) do
                 Wait(1)
             end
             
-            ped = CreatePed(4, GetHashKey(model), location.x, location.y, location.z - 1.0, 0.0, false, true)
+            ped = CreatePed(4, GetHashKey(storeData.clerk.model), location.x, location.y, location.z - 1.0, location.w, false, true)
             
-            SetEntityHeading(ped, location.w or 0.0)
+            SetEntityHeading(ped, location.w)
             FreezeEntityPosition(ped, true)
             SetEntityInvincible(ped, true)
             SetBlockingOfNonTemporaryEvents(ped, true)
             
             -- Set animation
-            TaskStartScenarioInPlace(ped, "WORLD_HUMAN_STAND_IMPATIENT", 0, true)
+            TaskStartScenarioInPlace(ped, storeData.clerk.scenario, 0, true)
             
             table.insert(clothingPeds, ped)
             
@@ -142,7 +131,7 @@ function LoadPeds()
                             store = storeName
                         }
                     },
-                    distance = 3.0
+                    distance = Config.PlayerInteraction.MaxDistance
                 })
             end
         end
@@ -170,7 +159,7 @@ CreateThread(function()
             for _, location in ipairs(storeData.locations) do
                 local dist = #(pos - vector3(location.x, location.y, location.z))
                 
-                if dist < 3.0 then
+                if dist < Config.PlayerInteraction.MaxDistance then
                     sleep = 0
                     isInsideStore = true
                     currentStore = storeName
@@ -178,7 +167,7 @@ CreateThread(function()
                     if dist < 1.5 then
                         QBCore.Functions.DrawText3D(location.x, location.y, location.z, "[E] Browse " .. storeData.label)
                         
-                        if IsControlJustPressed(0, Config.DefaultInteractKey) then
+                        if IsControlJustPressed(0, 38) then -- E key
                             TriggerEvent("clothing-system:client:openStore", {store = storeName})
                         end
                     end
@@ -190,18 +179,18 @@ CreateThread(function()
             if isInsideStore then break end
         end
         
-        -- Check for laundromats and tailor shops (similar logic)
+        -- Check for laundromats and tailor shops
         if not isInsideStore then
             for _, location in ipairs(Config.Laundromats) do
-                local dist = #(pos - vector3(location.x, location.y, location.z))
+                local dist = #(pos - vector3(location.coords.x, location.coords.y, location.coords.z))
                 
-                if dist < 3.0 then
+                if dist < Config.PlayerInteraction.MaxDistance then
                     sleep = 0
                     
                     if dist < 1.5 then
-                        QBCore.Functions.DrawText3D(location.x, location.y, location.z, "[E] Use Laundromat")
+                        QBCore.Functions.DrawText3D(location.coords.x, location.coords.y, location.coords.z, "[E] Use Laundromat")
                         
-                        if IsControlJustPressed(0, Config.DefaultInteractKey) then
+                        if IsControlJustPressed(0, 38) then -- E key
                             TriggerEvent("clothing-system:client:openLaundromat")
                         end
                     end
@@ -210,16 +199,16 @@ CreateThread(function()
                 end
             end
             
-            for _, location in ipairs(Config.TailorShops) do
-                local dist = #(pos - vector3(location.x, location.y, location.z))
+            for _, location in ipairs(Config.Tailors) do
+                local dist = #(pos - vector3(location.coords.x, location.coords.y, location.coords.z))
                 
-                if dist < 3.0 then
+                if dist < Config.PlayerInteraction.MaxDistance then
                     sleep = 0
                     
                     if dist < 1.5 then
-                        QBCore.Functions.DrawText3D(location.x, location.y, location.z, "[E] Use Tailor Services")
+                        QBCore.Functions.DrawText3D(location.coords.x, location.coords.y, location.coords.z, "[E] Use Tailor Services")
                         
-                        if IsControlJustPressed(0, Config.DefaultInteractKey) then
+                        if IsControlJustPressed(0, 38) then -- E key
                             TriggerEvent("clothing-system:client:openTailor")
                         end
                     end
@@ -252,45 +241,17 @@ RegisterNetEvent('clothing-system:client:openStore', function(data)
             return
         end
         
-        -- Process inventory data
-        local processedInventory = {}
-        for _, itemName in ipairs(inventory) do
-            local item = QBCore.Shared.Items[itemName]
-            
-            if item then
-                -- Add needed properties from item metadata
-                local itemData = {
-                    name = itemName,
-                    label = item.label,
-                    description = item.description,
-                    price = GetItemPrice(itemName, storeName),
-                    rarity = item.client and item.client.rarity or "common",
-                    category = item.client and item.client.category or "tops",
-                    variations = item.client and item.client.variations or {},
-                    gender = item.client and item.client.gender or "male"
-                }
-                
-                -- Only show items that match player's gender or are unisex
-                local playerGender = GetPlayerGender()
-                if itemData.gender == playerGender or itemData.gender == "unisex" then
-                    table.insert(processedInventory, itemData)
-                end
-            end
-        end
-        
-        -- Open NUI with processed store data
+        -- Open store UI
         SetNuiFocus(true, true)
         SendNUIMessage({
             action = "openStore",
-            storeData = {
-                label = storeData.label,
-                description = storeData.description,
-                inventory = processedInventory
-            }
+            store = storeName,
+            storeData = storeData,
+            inventory = inventory,
+            playerMoney = PlayerData.money.cash,
+            theme = Config.UI.Theme,
+            language = Config.UI.Language
         })
-        
-        -- Save currently open store
-        currentStore = storeName
     end, storeName)
 end)
 
@@ -612,7 +573,7 @@ RegisterCommand('washclothes', function()
     local nearLaundromat = false
     
     for _, location in ipairs(Config.Laundromats) do
-        if #(playerCoords - vector3(location.x, location.y, location.z)) < 3.0 then
+        if #(playerCoords - vector3(location.coords.x, location.coords.y, location.coords.z)) < 3.0 then
             nearLaundromat = true
             break
         end
@@ -629,8 +590,8 @@ RegisterCommand('repairclothes', function()
     local playerCoords = GetEntityCoords(PlayerPedId())
     local nearTailor = false
     
-    for _, location in ipairs(Config.TailorShops) do
-        if #(playerCoords - vector3(location.x, location.y, location.z)) < 3.0 then
+    for _, location in ipairs(Config.Tailors) do
+        if #(playerCoords - vector3(location.coords.x, location.coords.y, location.coords.z)) < 3.0 then
             nearTailor = true
             break
         end
@@ -773,8 +734,8 @@ end
 function LoadLaundromats()
     for i, location in ipairs(Config.Laundromats) do
         -- Create blip
-        local blip = AddBlipForCoord(location.x, location.y, location.z)
-        SetBlipSprite(blip, 362)
+        local blip = AddBlipForCoord(location.coords.x, location.coords.y, location.coords.z)
+        SetBlipSprite(blip, location.blip.sprite)
         SetBlipDisplay(blip, 4)
         SetBlipScale(blip, 0.7)
         SetBlipColour(blip, 3)
@@ -785,7 +746,7 @@ function LoadLaundromats()
         
         -- Create interaction zone
         local zoneName = "laundromat_" .. i
-        local zone = CircleZone:Create(vector3(location.x, location.y, location.z), 2.0, {
+        local zone = CircleZone:Create(vector3(location.coords.x, location.coords.y, location.coords.z), 2.0, {
             name = zoneName,
             debugPoly = Config.Debug,
             useZ = true
@@ -808,8 +769,8 @@ end
 function LoadTailors()
     for i, location in ipairs(Config.Tailors) do
         -- Create blip
-        local blip = AddBlipForCoord(location.x, location.y, location.z)
-        SetBlipSprite(blip, 366)
+        local blip = AddBlipForCoord(location.coords.x, location.coords.y, location.coords.z)
+        SetBlipSprite(blip, location.blip.sprite)
         SetBlipDisplay(blip, 4)
         SetBlipScale(blip, 0.7)
         SetBlipColour(blip, 21)
@@ -825,7 +786,7 @@ function LoadTailors()
             Wait(0)
         end
         
-        local npc = CreatePed(4, model, location.x, location.y, location.z - 1.0, location.w, false, true)
+        local npc = CreatePed(4, model, location.coords.x, location.coords.y, location.coords.z - 1.0, location.coords.w, false, true)
         FreezeEntityPosition(npc, true)
         SetEntityInvincible(npc, true)
         SetBlockingOfNonTemporaryEvents(npc, true)
@@ -833,7 +794,7 @@ function LoadTailors()
         
         -- Create interaction zone
         local zoneName = "tailor_" .. i
-        local zone = CircleZone:Create(vector3(location.x, location.y, location.z), 2.0, {
+        local zone = CircleZone:Create(vector3(location.coords.x, location.coords.y, location.coords.z), 2.0, {
             name = zoneName,
             debugPoly = Config.Debug,
             useZ = true

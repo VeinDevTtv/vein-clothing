@@ -8,6 +8,8 @@ Config = {}
 Config.Debug = false -- Enable debug mode for development
 Config.UseOxLib = true -- Enable ox_lib integration for enhanced features
 Config.UseOxInventory = true -- Set to true if using ox_inventory, false for QB-Core inventory
+Config.UseTarget = true -- Enable qb-target integration for interactions
+Config.DefaultInteractKey = 38 -- Default key for interactions (E key)
 
 --[[
     INVENTORY INTEGRATION
@@ -247,6 +249,18 @@ Config.UI = {
 }
 
 --[[
+    NOTIFICATIONS
+    Configure notification settings
+]]
+Config.Notifications = {
+    Enable = true, -- Enable notifications
+    Type = 'qb', -- Notification type (qb/ox_lib)
+    Position = 'top-right', -- Notification position
+    Duration = 5000, -- Duration in milliseconds
+    Sound = true -- Enable notification sounds
+}
+
+--[[
     COMMANDS
     Configure available commands
 ]]
@@ -276,17 +290,6 @@ Config.Permissions = {
         ['give'] = {'admin', 'superadmin'}, -- Who can give items
         ['delete'] = {'admin', 'superadmin'} -- Who can delete outfits
     }
-}
-
---[[
-    NOTIFICATIONS
-    Configure notification settings
-]]
-Config.Notifications = {
-    Type = 'qb', -- Notification type (qb/ox_lib)
-    Position = 'top-right', -- Notification position
-    Duration = 5000, -- Duration in milliseconds
-    Sound = true -- Enable notification sounds
 }
 
 --[[

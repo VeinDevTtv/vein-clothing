@@ -40,7 +40,8 @@ lua54 'yes'
 dependencies {
     'qb-core',
     'oxmysql',
-    'ox_lib'
+    'ox_lib',
+    'qb-target'
 }
 
 escrow_ignore {

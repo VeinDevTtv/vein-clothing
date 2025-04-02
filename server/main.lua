@@ -43,7 +43,7 @@ function StartPeriodicFunctions()
     -- Restock stores periodically
     CreateThread(function()
         while true do
-            Wait(Config.RestockInterval * 60 * 1000) -- Convert minutes to milliseconds
+            Wait(Config.Restocking.Interval * 60 * 1000) -- Convert minutes to milliseconds
             RestockStores()
         end
     end)
@@ -51,7 +51,7 @@ function StartPeriodicFunctions()
     -- Update clothing condition for players
     CreateThread(function()
         while true do
-            Wait(Config.ConditionUpdateInterval * 60 * 1000) -- Convert minutes to milliseconds
+            Wait(Config.Condition.DegradationInterval) -- Already in milliseconds
             UpdateClothingCondition()
         end
     end)
@@ -214,7 +214,8 @@ function RegisterCallbacks()
         for _, item in pairs(items) do
             -- Check if it's a clothing item and is dirty
             if item and item.name and QBCore.Shared.Items[item.name] and QBCore.Shared.Items[item.name].client and QBCore.Shared.Items[item.name].client.category then
-                local isDirty = item.info and item.info.dirty
+                local condition = item.info and item.info.condition or 100
+                local isDirty = condition <= Config.Condition.DirtyThreshold
                 
                 if isDirty then
                     table.insert(dirtyClothing, {
@@ -248,14 +249,14 @@ function RegisterCallbacks()
             -- Check if it's a clothing item and is damaged
             if item and item.name and QBCore.Shared.Items[item.name] and QBCore.Shared.Items[item.name].client and QBCore.Shared.Items[item.name].client.category then
                 local condition = item.info and item.info.condition or 100
+                local isDamaged = condition <= Config.Condition.DamagedThreshold
                 
-                if condition < 75 then
+                if isDamaged then
                     table.insert(damagedClothing, {
                         name = item.name,
                         label = QBCore.Shared.Items[item.name].label,
                         slot = item.slot,
-                        metadata = item.info or {},
-                        condition = condition
+                        metadata = item.info or {}
                     })
                 end
             end
@@ -264,8 +265,8 @@ function RegisterCallbacks()
         cb(damagedClothing)
     end)
     
-    -- Check if player has an item callback
-    QBCore.Functions.CreateCallback('clothing-system:server:hasItem', function(source, cb, itemName)
+    -- Restock store callback
+    QBCore.Functions.CreateCallback('clothing-system:server:restockStore', function(source, cb, storeType)
         local src = source
         local Player = QBCore.Functions.GetPlayer(src)
         
@@ -274,142 +275,92 @@ function RegisterCallbacks()
             return
         end
         
-        local hasItem = Player.Functions.GetItemByName(itemName)
-        cb(hasItem ~= nil)
+        -- Check permissions
+        local hasPermission = false
+        for _, group in ipairs(Config.Permissions.Features['restock']) do
+            if Player.PlayerData.group == group then
+                hasPermission = true
+                break
+            end
+        end
+        
+        if not hasPermission then
+            QBCore.Functions.Notify(src, "You don't have permission to restock stores", "error")
+            cb(false)
+            return
+        end
+        
+        -- Restock store
+        RestockStore(storeType)
+        cb(true)
     end)
 end
 
--- Restock store inventories
-function RestockStores()
-    for storeType, storeData in pairs(Config.Stores) do
-        local needsRestock = NeedsRestock[storeType] or false
+-- Restock a specific store
+function RestockStore(storeType)
+    if not StoreStock[storeType] then return end
+    
+    for itemName, stockData in pairs(StoreStock[storeType]) do
+        local rarity = stockData.rarity
+        local minRestock = Config.Rarity[rarity].minRestock
+        local maxRestock = Config.Rarity[rarity].maxRestock
         
-        -- Check if it's time to restock based on last restock time or if force restock is needed
-        if needsRestock then
-            -- Restock all items
-            for itemName, stockData in pairs(StoreStock[storeType]) do
-                local rarity = stockData.rarity
-                local restock = math.random(Config.Rarity[rarity].minRestock or 1, Config.Rarity[rarity].maxRestock or 3)
+        local restockAmount = math.random(minRestock, maxRestock)
+        stockData.stock = math.min(stockData.stock + restockAmount, stockData.maxStock)
+        stockData.lastRestock = os.time()
+    end
+    
+    NeedsRestock[storeType] = false
+end
+
+-- Restock all stores
+function RestockStores()
+    for storeType, _ in pairs(StoreStock) do
+        RestockStore(storeType)
+    end
+end
+
+-- Update clothing condition for all players
+function UpdateClothingCondition()
+    local players = QBCore.Functions.GetQBPlayers()
+    
+    for _, player in pairs(players) do
+        local items = player.PlayerData.items
+        
+        for _, item in pairs(items) do
+            if item and item.name and QBCore.Shared.Items[item.name] and QBCore.Shared.Items[item.name].client and QBCore.Shared.Items[item.name].client.category then
+                local rarity = QBCore.Shared.Items[item.name].client.rarity or "common"
+                local condition = item.info and item.info.condition or 100
                 
-                -- Add to current stock, not exceeding max stock
-                StoreStock[storeType][itemName].stock = math.min(stockData.stock + restock, stockData.maxStock)
-                StoreStock[storeType][itemName].lastRestock = os.time()
-            end
-            
-            NeedsRestock[storeType] = false
-            
-            -- Notify all players that the store has been restocked
-            TriggerClientEvent('clothing-system:client:updateStores', -1)
-        else
-            -- Randomly check if we should restock
-            if math.random() < 0.3 then -- 30% chance to restock when periodic check happens
-                -- Loop items to see which ones need restocking
-                local anyRestocked = false
-                
-                for itemName, stockData in pairs(StoreStock[storeType]) do
-                    if stockData.stock < stockData.maxStock * 0.5 then -- Below 50% stock
-                        local rarity = stockData.rarity
-                        local restock = math.random(Config.Rarity[rarity].minRestock or 1, Config.Rarity[rarity].maxRestock or 3)
-                        
-                        -- Add to current stock, not exceeding max stock
-                        StoreStock[storeType][itemName].stock = math.min(stockData.stock + restock, stockData.maxStock)
-                        StoreStock[storeType][itemName].lastRestock = os.time()
-                        anyRestocked = true
-                    end
+                -- Calculate degradation based on whether item is worn or stored
+                local degradation = 0
+                if item.info and item.info.worn then
+                    degradation = math.random(Config.Condition.WornDegradationMin, Config.Condition.WornDegradationMax)
+                else
+                    degradation = math.random(Config.Condition.StoredDegradationMin, Config.Condition.StoredDegradationMax)
                 end
                 
-                if anyRestocked then
-                    -- Notify all players that the store has been restocked
-                    TriggerClientEvent('clothing-system:client:updateStores', -1)
-                end
+                -- Apply rarity multiplier to degradation
+                local rarityMultiplier = Config.RarityRepairMultiplier[rarity] or 1.0
+                degradation = math.floor(degradation * rarityMultiplier)
+                
+                -- Update condition
+                condition = math.max(0, condition - degradation)
+                
+                -- Update item metadata
+                if not item.info then item.info = {} end
+                item.info.condition = condition
+                
+                -- Update item in inventory
+                player.Functions.RemoveItem(item.name, 1, item.slot)
+                player.Functions.AddItem(item.name, 1, item.slot, item.info)
             end
         end
     end
 end
 
--- Update clothing condition for all active players
-function UpdateClothingCondition()
-    -- Loop through all connected players
-    for _, serverId in ipairs(GetPlayers()) do
-        local src = tonumber(serverId)
-        local Player = QBCore.Functions.GetPlayer(src)
-        
-        if Player then
-            -- Loop through all items in player's inventory
-            for _, item in pairs(Player.PlayerData.items) do
-                -- Check if it's a clothing item
-                if item and item.name and QBCore.Shared.Items[item.name] and QBCore.Shared.Items[item.name].client and QBCore.Shared.Items[item.name].client.category then
-                    -- Check if it's currently worn
-                    local isWorn = false
-                    
-                    -- Get metadata
-                    local metadata = item.info or {}
-                    local condition = metadata.condition or 100
-                    local lastWorn = metadata.lastWorn or 0
-                    
-                    -- Check if we have a player-specific degradation interval
-                    local playerId = src
-                    if not DegradationIntervals[playerId] then
-                        DegradationIntervals[playerId] = {}
-                    end
-                    
-                    if not DegradationIntervals[playerId][item.name] then
-                        DegradationIntervals[playerId][item.name] = os.time() + math.random(Config.ConditionUpdateInterval * 60, Config.ConditionUpdateInterval * 120) -- Random interval between update interval and 2x that
-                    end
-                    
-                    -- Check if it's time to degrade this item
-                    if os.time() >= DegradationIntervals[playerId][item.name] then
-                        -- Trigger callback to check if the item is worn by the player
-                        TriggerClientEvent('clothing-system:client:checkIfWorn', src, item.name, function(worn)
-                            isWorn = worn
-                            
-                            -- Degrade condition based on whether it's worn
-                            local degradation = 0
-                            
-                            if isWorn then
-                                -- Higher degradation for worn items
-                                degradation = math.random(Config.WornDegradationMin, Config.WornDegradationMax)
-                            else
-                                -- Lower degradation for stored items
-                                degradation = math.random(Config.StoredDegradationMin, Config.StoredDegradationMax)
-                            end
-                            
-                            -- Apply degradation
-                            local newCondition = math.max(0, condition - degradation)
-                            
-                            -- Update item metadata
-                            metadata.condition = newCondition
-                            
-                            -- Check if the item should become dirty
-                            if isWorn and math.random() < Config.DirtyChance then
-                                metadata.dirty = true
-                            end
-                            
-                            -- Update item in inventory
-                            Player.Functions.SetItemMetaData(item.slot, metadata)
-                            
-                            -- Update last worn timestamp if the item is currently worn
-                            if isWorn then
-                                metadata.lastWorn = os.time()
-                                
-                                -- Update item in inventory again with the new lastWorn
-                                Player.Functions.SetItemMetaData(item.slot, metadata)
-                                
-                                -- Notify player if condition is getting low
-                                if newCondition < condition and (newCondition <= 25 or newCondition <= 10) then
-                                    TriggerClientEvent('clothing-system:client:clothingDamaged', src, item.name, newCondition)
-                                end
-                            end
-                            
-                            -- Reset interval
-                            DegradationIntervals[playerId][item.name] = os.time() + math.random(Config.ConditionUpdateInterval * 60, Config.ConditionUpdateInterval * 120)
-                        end)
-                    end
-                end
-            end
-        end
-    end
-end
+-- Initialize on resource start
+Initialize()
 
 -- Player purchased an item
 function PurchaseItem(source, itemName, storeType)
@@ -488,12 +439,6 @@ function PurchaseItem(source, itemName, storeType)
     
     return true, "Purchase successful"
 end
-
--- Initialize on resource start
-AddEventHandler('onResourceStart', function(resourceName)
-    if GetCurrentResourceName() ~= resourceName then return end
-    Initialize()
-end)
 
 -- Expose functions for export
 exports('purchaseItem', PurchaseItem)
