@@ -1,0 +1,29 @@
+.app {
+    font-family: Arial, sans-serif;
+    padding: 20px;
+  }
+  
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .item-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-top: 20px;
+  }
+  
+  .item-card {
+    border: 1px solid #ccc;
+    padding: 15px;
+    width: 150px;
+    text-align: center;
+  }
+  
+  .item-card button {
+    margin: 5px 0;
+  }
+  
