@@ -6,6 +6,37 @@ local currentOutfit = {}
 local inWardrobe = false
 local clothingPeds = {}
 
+-- Global variables for the clothing system
+currentOutfit = {}
+currentStore = nil
+currentStoreBlip = nil
+isInClothingStore = false
+isPreviewing = false
+isInWardrobe = false
+isInLaundromat = false
+isInTailor = false
+storeNPCs = {}
+storeZones = {}
+previewCam = nil
+
+-- Item category to component ID mapping
+local clothingComponents = {
+    tops = {component = 11, texture = 0},
+    pants = {component = 4, texture = 0},
+    shoes = {component = 6, texture = 0},
+    masks = {component = 1, texture = 0},
+    hats = {component = 0, prop = true, texture = 0},
+    glasses = {component = 1, prop = true, texture = 0},
+    ears = {component = 2, prop = true, texture = 0},
+    watches = {component = 6, prop = true, texture = 0},
+    bracelets = {component = 7, prop = true, texture = 0},
+    torso = {component = 3, texture = 0},
+    undershirt = {component = 8, texture = 0},
+    vests = {component = 9, texture = 0},
+    decals = {component = 10, texture = 0},
+    accessories = {component = 7, texture = 0}
+}
+
 -- Initialize player data
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     PlayerData = QBCore.Functions.GetPlayerData()
@@ -610,4 +641,592 @@ RegisterCommand('repairclothes', function()
     else
         QBCore.Functions.Notify("You need to be at a tailor shop", "error")
     end
-end, false) 
+end, false)
+
+-- Initialize function (called on script start)
+function Initialize()
+    LoadStores()
+    LoadLaundromats()
+    LoadTailors()
+    LoadPlayerOutfit()
+    RegisterCommands()
+    StartConditionMonitoring()
+end
+
+-- Load player's saved outfit on spawn
+function LoadPlayerOutfit()
+    CreateThread(function()
+        while not QBCore.Functions.GetPlayerData().citizenid do
+            Wait(100)
+        end
+        
+        QBCore.Functions.TriggerCallback('clothing-system:server:getDefaultOutfit', function(outfit)
+            if outfit and next(outfit) then
+                WearOutfit(outfit)
+                QBCore.Functions.Notify(Lang:t('info.default_outfit_loaded'), 'success')
+            end
+        end)
+    end)
+end
+
+-- Create store blips on the map
+function LoadStores()
+    -- Remove existing blips first
+    if currentStoreBlip then
+        RemoveBlip(currentStoreBlip)
+        currentStoreBlip = nil
+    end
+    
+    -- Clear existing NPCs
+    for _, npc in pairs(storeNPCs) do
+        if DoesEntityExist(npc.handle) then
+            DeleteEntity(npc.handle)
+        end
+    end
+    storeNPCs = {}
+    
+    -- Clear existing zones
+    for _, zone in pairs(storeZones) do
+        zone:destroy()
+    end
+    storeZones = {}
+    
+    -- Create new blips and NPCs
+    for storeType, storeData in pairs(Config.Stores) do
+        for i, location in ipairs(storeData.locations) do
+            -- Create blip
+            local blip = AddBlipForCoord(location.x, location.y, location.z)
+            SetBlipSprite(blip, storeData.blip.sprite)
+            SetBlipDisplay(blip, 4)
+            SetBlipScale(blip, storeData.blip.scale)
+            SetBlipColour(blip, storeData.blip.color)
+            SetBlipAsShortRange(blip, true)
+            BeginTextCommandSetBlipName("STRING")
+            AddTextComponentString(storeData.label)
+            EndTextCommandSetBlipName(blip)
+            
+            -- Create store clerk NPC
+            CreateStoreClerk(storeType, location, i)
+            
+            -- Create interaction zone
+            local zoneName = storeType .. "_" .. i
+            local radius = 2.0
+            local zone = CircleZone:Create(vector3(location.x, location.y, location.z), radius, {
+                name = zoneName,
+                debugPoly = Config.Debug,
+                useZ = true
+            })
+            
+            zone:onPlayerInOut(function(isPointInside)
+                if isPointInside then
+                    isInClothingStore = true
+                    currentStore = storeType
+                    QBCore.Functions.Notify(Lang:t('info.press_to_browse', {key = "~INPUT_CONTEXT~", store = storeData.label}), 'primary', 5000)
+                else
+                    if currentStore == storeType then
+                        isInClothingStore = false
+                        currentStore = nil
+                    end
+                end
+            end)
+            
+            table.insert(storeZones, zone)
+        end
+    end
+end
+
+-- Create store clerk NPCs
+function CreateStoreClerk(storeType, location, index)
+    local storeData = Config.Stores[storeType]
+    local clerk = {
+        type = storeType,
+        location = location,
+        index = index,
+        handle = nil
+    }
+    
+    CreateThread(function()
+        local model = GetHashKey(storeData.clerk.model)
+        RequestModel(model)
+        while not HasModelLoaded(model) do
+            Wait(0)
+        end
+        
+        local npc = CreatePed(4, model, location.x, location.y, location.z - 1.0, location.w, false, true)
+        FreezeEntityPosition(npc, true)
+        SetEntityInvincible(npc, true)
+        SetBlockingOfNonTemporaryEvents(npc, true)
+        
+        -- Apply animations
+        if storeData.clerk.scenario then
+            TaskStartScenarioInPlace(npc, storeData.clerk.scenario, 0, true)
+        end
+        
+        clerk.handle = npc
+        table.insert(storeNPCs, clerk)
+        
+        SetModelAsNoLongerNeeded(model)
+    end)
+end
+
+-- Load laundromat locations
+function LoadLaundromats()
+    for i, location in ipairs(Config.Laundromats) do
+        -- Create blip
+        local blip = AddBlipForCoord(location.x, location.y, location.z)
+        SetBlipSprite(blip, 362)
+        SetBlipDisplay(blip, 4)
+        SetBlipScale(blip, 0.7)
+        SetBlipColour(blip, 3)
+        SetBlipAsShortRange(blip, true)
+        BeginTextCommandSetBlipName("STRING")
+        AddTextComponentString(Lang:t('ui.laundromat'))
+        EndTextCommandSetBlipName(blip)
+        
+        -- Create interaction zone
+        local zoneName = "laundromat_" .. i
+        local zone = CircleZone:Create(vector3(location.x, location.y, location.z), 2.0, {
+            name = zoneName,
+            debugPoly = Config.Debug,
+            useZ = true
+        })
+        
+        zone:onPlayerInOut(function(isPointInside)
+            if isPointInside then
+                isInLaundromat = true
+                QBCore.Functions.Notify(Lang:t('info.press_to_access', {key = "~INPUT_CONTEXT~", place = Lang:t('ui.laundromat')}), 'primary', 5000)
+            else
+                isInLaundromat = false
+            end
+        end)
+        
+        table.insert(storeZones, zone) -- Reuse the same table
+    end
+end
+
+-- Load tailor shop locations
+function LoadTailors()
+    for i, location in ipairs(Config.Tailors) do
+        -- Create blip
+        local blip = AddBlipForCoord(location.x, location.y, location.z)
+        SetBlipSprite(blip, 366)
+        SetBlipDisplay(blip, 4)
+        SetBlipScale(blip, 0.7)
+        SetBlipColour(blip, 21)
+        SetBlipAsShortRange(blip, true)
+        BeginTextCommandSetBlipName("STRING")
+        AddTextComponentString(Lang:t('ui.tailor'))
+        EndTextCommandSetBlipName(blip)
+        
+        -- Create tailor NPC
+        local model = GetHashKey("s_m_m_tailor_01")
+        RequestModel(model)
+        while not HasModelLoaded(model) do
+            Wait(0)
+        end
+        
+        local npc = CreatePed(4, model, location.x, location.y, location.z - 1.0, location.w, false, true)
+        FreezeEntityPosition(npc, true)
+        SetEntityInvincible(npc, true)
+        SetBlockingOfNonTemporaryEvents(npc, true)
+        TaskStartScenarioInPlace(npc, "WORLD_HUMAN_STAND_IMPATIENT", 0, true)
+        
+        -- Create interaction zone
+        local zoneName = "tailor_" .. i
+        local zone = CircleZone:Create(vector3(location.x, location.y, location.z), 2.0, {
+            name = zoneName,
+            debugPoly = Config.Debug,
+            useZ = true
+        })
+        
+        zone:onPlayerInOut(function(isPointInside)
+            if isPointInside then
+                isInTailor = true
+                QBCore.Functions.Notify(Lang:t('info.press_to_access', {key = "~INPUT_CONTEXT~", place = Lang:t('ui.tailor')}), 'primary', 5000)
+            else
+                isInTailor = false
+            end
+        end)
+        
+        table.insert(storeZones, zone) -- Reuse the same table
+        table.insert(storeNPCs, {handle = npc, type = "tailor", index = i})
+        
+        SetModelAsNoLongerNeeded(model)
+    end
+end
+
+-- Monitor the condition of clothing items and provide notifications
+function StartConditionMonitoring()
+    CreateThread(function()
+        while true do
+            Wait(60000) -- Check every minute
+            
+            -- Check worn items condition
+            for _, item in pairs(currentOutfit) do
+                if item.metadata and item.metadata.condition then
+                    local condition = item.metadata.condition
+                    
+                    -- Notify player if any item is in poor condition
+                    if condition <= 25 and condition > 10 then
+                        QBCore.Functions.Notify(Lang:t('condition.poor', {item = item.label}), 'primary')
+                    elseif condition <= 10 then
+                        QBCore.Functions.Notify(Lang:t('condition.terrible', {item = item.label}), 'error')
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- Wear an entire outfit
+function WearOutfit(outfit)
+    -- Reset appearance first
+    ResetAppearance()
+    
+    -- Apply each clothing item
+    for _, item in pairs(outfit) do
+        ApplyClothing(item.name, item.metadata and item.metadata.variation or 0)
+    end
+    
+    -- Save the current outfit globally
+    currentOutfit = outfit
+    
+    -- Update the last worn timestamp for each item
+    TriggerServerEvent('clothing-system:server:updateLastWorn', outfit)
+end
+
+-- Remove a specific clothing item
+function RemoveClothing(itemName)
+    -- Find the category of the item
+    local item = QBCore.Shared.Items[itemName]
+    if not item or not item.client or not item.client.category then
+        QBCore.Functions.Notify(Lang:t('error.item_not_wearable'), 'error')
+        return false
+    end
+    
+    local category = item.client.category
+    local componentInfo = clothingComponents[category]
+    
+    if not componentInfo then
+        QBCore.Functions.Notify(Lang:t('error.unknown_category', {category = category}), 'error')
+        return false
+    end
+    
+    -- Remove the item from current outfit
+    for i, outfitItem in pairs(currentOutfit) do
+        if outfitItem.name == itemName then
+            table.remove(currentOutfit, i)
+            break
+        end
+    end
+    
+    -- Reset the specific component
+    if componentInfo.prop then
+        ClearPedProp(PlayerPedId(), componentInfo.component)
+    else
+        SetPedComponentVariation(PlayerPedId(), componentInfo.component, 0, 0, 2)
+    end
+    
+    return true
+end
+
+-- Apply a specific clothing item
+function ApplyClothing(itemName, variation)
+    -- Find the item in the shared items list
+    local item = QBCore.Shared.Items[itemName]
+    if not item or not item.client or not item.client.category then
+        QBCore.Functions.Notify(Lang:t('error.item_not_wearable'), 'error')
+        return false
+    end
+    
+    local category = item.client.category
+    local componentInfo = clothingComponents[category]
+    
+    if not componentInfo then
+        QBCore.Functions.Notify(Lang:t('error.unknown_category', {category = category}), 'error')
+        return false
+    end
+    
+    -- Get item variation data
+    local variations = item.client.variations or {}
+    local selectedVariation = variations[variation] or variations[1] or {drawable = 0, texture = 0}
+    
+    -- Apply the clothing item
+    if componentInfo.prop then
+        SetPedPropIndex(
+            PlayerPedId(),
+            componentInfo.component,
+            selectedVariation.drawable or 0,
+            selectedVariation.texture or 0,
+            true
+        )
+    else
+        SetPedComponentVariation(
+            PlayerPedId(),
+            componentInfo.component,
+            selectedVariation.drawable or 0,
+            selectedVariation.texture or 0,
+            2
+        )
+    end
+    
+    return true
+end
+
+-- Reset player appearance to default
+function ResetAppearance()
+    local playerPed = PlayerPedId()
+    
+    -- Clear all props
+    ClearAllPedProps(playerPed)
+    
+    -- Reset all components to default
+    for category, componentInfo in pairs(clothingComponents) do
+        if not componentInfo.prop then
+            SetPedComponentVariation(playerPed, componentInfo.component, 0, 0, 2)
+        end
+    end
+    
+    -- Reset current outfit
+    currentOutfit = {}
+end
+
+-- Preview a clothing item without adding it to inventory
+function PreviewClothing(itemName, variation)
+    -- Store current outfit for restoration later
+    local previousOutfit = currentOutfit
+    
+    -- Apply the clothing item for preview
+    local success = ApplyClothing(itemName, variation or 0)
+    
+    -- Start camera preview
+    if not isPreviewing and success then
+        StartPreviewCamera()
+        isPreviewing = true
+        
+        -- Set a timeout to restore previous outfit
+        CreateThread(function()
+            local startTime = GetGameTimer()
+            local previewDuration = 30000 -- 30 seconds
+            
+            while GetGameTimer() - startTime < previewDuration and isPreviewing do
+                Wait(0)
+                
+                -- Show help text
+                DisplayHelpTextThisFrame("preview_controls", false)
+                
+                -- Check for input to cancel preview
+                if IsControlJustPressed(0, 194) then -- Backspace
+                    break
+                end
+                
+                -- Rotate player with keys
+                if IsControlPressed(0, 108) then -- Numpad 4 (rotate left)
+                    SetEntityHeading(playerPed, GetEntityHeading(playerPed) + 1.0)
+                elseif IsControlPressed(0, 107) then -- Numpad 6 (rotate right)
+                    SetEntityHeading(playerPed, GetEntityHeading(playerPed) - 1.0)
+                end
+            end
+            
+            -- Restore previous outfit
+            WearOutfit(previousOutfit)
+            StopPreviewCamera()
+            isPreviewing = false
+        end)
+    end
+    
+    return success
+end
+
+-- Start camera for clothing preview
+function StartPreviewCamera()
+    local playerPed = PlayerPedId()
+    local coords = GetEntityCoords(playerPed)
+    
+    -- Create a camera in front of the player
+    previewCam = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
+    
+    local offset = GetOffsetFromEntityInWorldCoords(playerPed, 0.0, 2.0, 0.0)
+    SetCamCoord(previewCam, offset.x, offset.y, coords.z)
+    PointCamAtCoord(previewCam, coords.x, coords.y, coords.z)
+    
+    SetCamActive(previewCam, true)
+    RenderScriptCams(true, false, 0, true, false)
+    
+    -- Disable movement
+    DisableControlActions(true)
+end
+
+-- Stop camera preview
+function StopPreviewCamera()
+    if previewCam then
+        RenderScriptCams(false, false, 0, true, false)
+        DestroyCam(previewCam, false)
+        previewCam = nil
+    end
+    
+    -- Re-enable movement
+    DisableControlActions(false)
+end
+
+-- Helper function to disable control actions
+function DisableControlActions(disable)
+    CreateThread(function()
+        while disable do
+            DisableControlAction(0, 30, true) -- Movement
+            DisableControlAction(0, 31, true) -- Movement
+            DisableControlAction(0, 32, true) -- W
+            DisableControlAction(0, 33, true) -- S
+            DisableControlAction(0, 34, true) -- A
+            DisableControlAction(0, 35, true) -- D
+            DisableControlAction(0, 36, true) -- Crouch
+            DisableControlAction(0, 44, true) -- Cover
+            Wait(0)
+        end
+    end)
+end
+
+-- Main thread for input handling
+CreateThread(function()
+    while true do
+        Wait(0)
+        
+        -- Store interaction
+        if isInClothingStore and IsControlJustPressed(0, 38) then -- E key
+            OpenClothingStore(currentStore)
+        end
+        
+        -- Laundromat interaction
+        if isInLaundromat and IsControlJustPressed(0, 38) then
+            OpenLaundromat()
+        end
+        
+        -- Tailor interaction
+        if isInTailor and IsControlJustPressed(0, 38) then
+            OpenTailor()
+        end
+    end
+end)
+
+-- Opens the clothing store UI
+function OpenClothingStore(storeType)
+    if not Config.Stores[storeType] then
+        QBCore.Functions.Notify(Lang:t('error.store_not_found'), 'error')
+        return
+    end
+    
+    local storeData = Config.Stores[storeType]
+    
+    -- Get store inventory from server
+    QBCore.Functions.TriggerCallback('clothing-system:server:getStoreInventory', function(inventory)
+        if not inventory then
+            QBCore.Functions.Notify(Lang:t('error.store_inventory_error'), 'error')
+            return
+        end
+        
+        -- Open the UI
+        SendNUIMessage({
+            action = "openStore",
+            store = {
+                type = storeType,
+                label = storeData.label,
+                inventory = inventory
+            }
+        })
+        
+        SetNuiFocus(true, true)
+    end, storeType)
+end
+
+-- Opens the laundromat UI
+function OpenLaundromat()
+    -- Get player's dirty clothing
+    QBCore.Functions.TriggerCallback('clothing-system:server:getDirtyClothing', function(dirtyClothing)
+        if not dirtyClothing or #dirtyClothing == 0 then
+            QBCore.Functions.Notify(Lang:t('info.no_dirty_clothing'), 'primary')
+            return
+        end
+        
+        -- Open the UI
+        SendNUIMessage({
+            action = "openLaundromat",
+            clothes = dirtyClothing,
+            price = Config.LaundryPrice
+        })
+        
+        SetNuiFocus(true, true)
+    end)
+end
+
+-- Opens the tailor UI
+function OpenTailor()
+    -- Get player's damaged clothing
+    QBCore.Functions.TriggerCallback('clothing-system:server:getDamagedClothing', function(damagedClothing)
+        if not damagedClothing or #damagedClothing == 0 then
+            QBCore.Functions.Notify(Lang:t('info.no_damaged_clothing'), 'primary')
+            return
+        end
+        
+        -- Open the UI
+        SendNUIMessage({
+            action = "openTailor",
+            clothes = damagedClothing,
+            price = Config.RepairPrice
+        })
+        
+        SetNuiFocus(true, true)
+    end)
+end
+
+-- Export functions 
+exports('openWardrobe', function()
+    -- Get player's clothing and outfits
+    QBCore.Functions.TriggerCallback('clothing-system:server:getPlayerClothing', function(clothing, outfits, wishlist)
+        SendNUIMessage({
+            action = "openWardrobe",
+            data = {
+                clothing = clothing,
+                outfits = outfits,
+                wishlist = wishlist,
+                currentOutfit = currentOutfit
+            }
+        })
+        
+        SetNuiFocus(true, true)
+        isInWardrobe = true
+    end)
+end)
+
+exports('wearOutfit', WearOutfit)
+exports('previewClothing', PreviewClothing)
+exports('resetAppearance', ResetAppearance)
+
+-- Initialize everything when resource starts
+AddEventHandler('onClientResourceStart', function(resourceName)
+    if GetCurrentResourceName() ~= resourceName then return end
+    Initialize()
+end)
+
+-- Clean up when resource stops
+AddEventHandler('onResourceStop', function(resourceName)
+    if GetCurrentResourceName() ~= resourceName then return end
+    
+    -- Clean up NPCs
+    for _, npc in pairs(storeNPCs) do
+        if DoesEntityExist(npc.handle) then
+            DeleteEntity(npc.handle)
+        end
+    end
+    
+    -- Clean up zones
+    for _, zone in pairs(storeZones) do
+        zone:destroy()
+    end
+    
+    -- Clean up camera
+    if previewCam then
+        RenderScriptCams(false, false, 0, true, false)
+        DestroyCam(previewCam, false)
+        previewCam = nil
+    end
+end) 

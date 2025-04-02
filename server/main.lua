@@ -1,616 +1,590 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
--- Initialize server-side data
-local StoreInventory = {}
-local ClothingStock = {}
+-- Global variables for store stock management
+local StoreStock = {}
+local DegradationIntervals = {}
+local NeedsRestock = {}
 
--- Load store inventory data on resource start
-AddEventHandler('onResourceStart', function(resourceName)
-    if GetCurrentResourceName() ~= resourceName then return end
-    
-    print("^2[clothing-system] ^7Loading store inventories...")
-    LoadStoreInventories()
-    
-    -- Set up restock timer if stock system is enabled
-    if Config.StockSystem then
-        CreateThread(function()
-            while true do
-                RestockAllStores()
-                Wait(Config.RestockInterval * 60 * 60 * 1000) -- Convert hours to milliseconds
-            end
-        end)
-    end
-end)
+-- Initialize function (called on script start)
+function Initialize()
+    -- Initialize store stock
+    InitializeStoreStock()
+    -- Start periodic functions
+    StartPeriodicFunctions()
+    -- Register callbacks
+    RegisterCallbacks()
+end
 
--- Load store inventories from config and database
-function LoadStoreInventories()
-    for store, data in pairs(Config.Stores) do
-        StoreInventory[store] = data.inventory
+-- Initialize store stock from config
+function InitializeStoreStock()
+    for storeType, storeData in pairs(Config.Stores) do
+        StoreStock[storeType] = {}
         
-        if Config.StockSystem then
-            -- Load stock data from DB
-            MySQL.Async.fetchAll('SELECT * FROM clothing_stores WHERE store = ?', {store}, function(results)
-                ClothingStock[store] = {}
-                
-                -- Initialize stock data for this store
-                if results and #results > 0 then
-                    for _, item in ipairs(results) do
-                        ClothingStock[store][item.item] = item.stock
-                    end
-                else
-                    -- Create initial stock entries for this store
-                    for _, item in ipairs(data.inventory) do
-                        local initialStock = math.random(5, 15)
-                        ClothingStock[store][item] = initialStock
-                        
-                        MySQL.Async.execute('INSERT INTO clothing_stores (store, item, stock) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE stock = ?', 
-                            {store, item, initialStock, initialStock})
-                    end
-                end
-            end)
+        -- Initialize stock based on config
+        for _, itemName in ipairs(storeData.inventory) do
+            -- Set initial stock
+            local rarity = QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.rarity or "common"
+            local maxStock = Config.Rarity[rarity].maxStock or 10
+            
+            StoreStock[storeType][itemName] = {
+                stock = math.random(1, maxStock),
+                maxStock = maxStock,
+                rarity = rarity,
+                lastRestock = os.time()
+            }
         end
+        
+        NeedsRestock[storeType] = false
     end
-    
-    print("^2[clothing-system] ^7Store inventories loaded successfully")
 end
 
--- Restock all stores
-function RestockAllStores()
-    if not Config.StockSystem then return end
-    
-    print("^2[clothing-system] ^7Restocking all clothing stores...")
-    
-    for store, _ in pairs(Config.Stores) do
-        for item, _ in pairs(ClothingStock[store] or {}) do
-            -- Random restock amount based on rarity
-            local itemData = QBCore.Shared.Items[item]
-            local rarity = itemData and itemData.client and itemData.client.rarity or "common"
-            
-            local restockAmount = 0
-            if rarity == "common" then
-                restockAmount = math.random(5, 10)
-            elseif rarity == "uncommon" then
-                restockAmount = math.random(3, 7)
-            elseif rarity == "rare" then
-                restockAmount = math.random(1, 4)
-            elseif rarity == "exclusive" then
-                restockAmount = math.random(1, 2)
-            elseif rarity == "limited" then
-                restockAmount = math.random(0, 1)
-            end
-            
-            if restockAmount > 0 then
-                ClothingStock[store][item] = (ClothingStock[store][item] or 0) + restockAmount
-                
-                MySQL.Async.execute('UPDATE clothing_stores SET stock = ?, last_restock = CURRENT_TIMESTAMP WHERE store = ? AND item = ?',
-                    {ClothingStock[store][item], store, item})
-            end
+-- Start periodic functions
+function StartPeriodicFunctions()
+    -- Restock stores periodically
+    CreateThread(function()
+        while true do
+            Wait(Config.RestockInterval * 60 * 1000) -- Convert minutes to milliseconds
+            RestockStores()
         end
-    end
+    end)
     
-    print("^2[clothing-system] ^7All clothing stores restocked")
+    -- Update clothing condition for players
+    CreateThread(function()
+        while true do
+            Wait(Config.ConditionUpdateInterval * 60 * 1000) -- Convert minutes to milliseconds
+            UpdateClothingCondition()
+        end
+    end)
 end
 
--- Get store inventory callback
-QBCore.Functions.CreateCallback('clothing-system:server:getStoreInventory', function(source, cb, storeName)
-    local store = Config.Stores[storeName]
-    if not store then
-        cb(false)
-        return
-    end
-    
-    if Config.StockSystem then
-        -- Filter out of stock items
-        local inventory = {}
-        for _, item in ipairs(store.inventory) do
-            if ClothingStock[storeName] and ClothingStock[storeName][item] and ClothingStock[storeName][item] > 0 then
-                table.insert(inventory, item)
-            end
-        end
-        cb(inventory)
-    else
-        -- Return full inventory if stock system is disabled
-        cb(store.inventory)
-    end
-end)
-
--- Purchase clothing item callback
-QBCore.Functions.CreateCallback('clothing-system:server:purchaseItem', function(source, cb, itemName, price, variation, storeName)
-    local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
-    
-    if not Player then
-        cb(false, "Player not found")
-        return
-    end
-    
-    -- Check if item exists
-    local item = QBCore.Shared.Items[itemName]
-    if not item then
-        cb(false, "Item not found")
-        return
-    end
-    
-    -- Check if item is in stock for this store
-    if Config.StockSystem then
-        if not ClothingStock[storeName] or not ClothingStock[storeName][itemName] or ClothingStock[storeName][itemName] <= 0 then
-            cb(false, "Item out of stock")
+-- Register callbacks
+function RegisterCallbacks()
+    -- Get store inventory callback
+    QBCore.Functions.CreateCallback('clothing-system:server:getStoreInventory', function(source, cb, storeType)
+        if not StoreStock[storeType] then
+            cb(nil)
             return
         end
-    end
-    
-    -- Check if player has enough money
-    local playerMoney = Player.PlayerData.money["cash"]
-    if playerMoney < price then
-        cb(false, "Not enough money")
-        return
-    end
-    
-    -- Create item object with metadata for variations
-    local itemMetadata = {}
-    if variation > 0 and item.client and item.client.variations and item.client.variations[variation + 1] then
-        itemMetadata.variation = variation
-        itemMetadata.texture = item.client.variations[variation + 1].texture
-    end
-    
-    -- Add condition metadata
-    itemMetadata.condition = 100 -- New item starts at 100% condition
-    
-    -- Remove money & add item to inventory
-    if Player.Functions.RemoveMoney("cash", price) then
-        if Player.Functions.AddItem(itemName, 1, nil, itemMetadata) then
-            -- Update stock if stock system is enabled
-            if Config.StockSystem then
-                ClothingStock[storeName][itemName] = ClothingStock[storeName][itemName] - 1
-                MySQL.Async.execute('UPDATE clothing_stores SET stock = stock - 1 WHERE store = ? AND item = ?', {storeName, itemName})
+        
+        local inventory = {}
+        
+        for itemName, stockData in pairs(StoreStock[storeType]) do
+            if stockData.stock > 0 then
+                local item = QBCore.Shared.Items[itemName]
+                if item then
+                    -- Get price based on rarity and store type
+                    local basePrice = item.price or 100
+                    local rarityMultiplier = Config.Rarity[stockData.rarity].priceMultiplier or 1.0
+                    local storeMultiplier = Config.Stores[storeType].priceMultiplier or 1.0
+                    local price = math.floor(basePrice * rarityMultiplier * storeMultiplier)
+                    
+                    -- Add to inventory
+                    table.insert(inventory, {
+                        name = itemName,
+                        label = item.label,
+                        price = price,
+                        stock = stockData.stock,
+                        rarity = stockData.rarity,
+                        category = item.client and item.client.category or "unknown",
+                        description = item.description or "",
+                        images = item.client and item.client.images or {}
+                    })
+                end
             end
-            
-            -- Log purchase
-            TriggerEvent('qb-log:server:CreateLog', 'clothing', 'Item Purchased', 'green', 
-                string.format('%s purchased %s for $%d', Player.PlayerData.name, item.label, price))
-            
-            cb(true)
-        else
-            -- Refund money if inventory full
-            Player.Functions.AddMoney("cash", price)
-            cb(false, "Inventory full")
         end
-    else
-        cb(false, "Transaction failed")
-    end
-end)
-
--- Get player's clothing inventory, saved outfits, and wishlist
-QBCore.Functions.CreateCallback('clothing-system:server:getPlayerClothing', function(source, cb)
-    local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
+        
+        cb(inventory)
+    end)
     
-    if not Player then
-        cb(false)
-        return
-    end
-    
-    local citizenid = Player.PlayerData.citizenid
-    
-    -- Get all clothing items from player's inventory
-    local clothing = {}
-    for _, item in pairs(Player.PlayerData.items) do
-        -- Check if it's a clothing item (has client data with category)
-        if item and item.name and QBCore.Shared.Items[item.name] and QBCore.Shared.Items[item.name].client and 
-           QBCore.Shared.Items[item.name].client.category then
-            -- Add item to clothing list with slot info
-            table.insert(clothing, {
-                name = item.name,
-                label = item.label,
-                slot = item.slot,
-                info = item.info, -- Contains metadata like condition and variation
-                category = QBCore.Shared.Items[item.name].client.category,
-                drawable = QBCore.Shared.Items[item.name].client.drawable,
-                texture = item.info and item.info.texture or QBCore.Shared.Items[item.name].client.texture,
-                variations = QBCore.Shared.Items[item.name].client.variations or {},
-                component = QBCore.Shared.Items[item.name].client.component,
-                gender = QBCore.Shared.Items[item.name].client.gender,
-                condition = item.info and item.info.condition or 100,
-                rarity = QBCore.Shared.Items[item.name].client.rarity or "common",
-                event = QBCore.Shared.Items[item.name].client.event
-            })
+    -- Get player's clothing callback
+    QBCore.Functions.CreateCallback('clothing-system:server:getPlayerClothing', function(source, cb)
+        local src = source
+        local Player = QBCore.Functions.GetPlayer(src)
+        
+        if not Player then
+            cb({}, {}, {})
+            return
         end
-    end
-    
-    -- Get player's saved outfits
-    MySQL.Async.fetchAll('SELECT * FROM player_outfits WHERE citizenid = ?', {citizenid}, function(outfitsResults)
+        
+        -- Get all clothing items from player inventory
+        local clothing = {}
+        local items = Player.PlayerData.items
+        
+        for _, item in pairs(items) do
+            -- Check if it's a clothing item
+            if item and item.name and QBCore.Shared.Items[item.name] and QBCore.Shared.Items[item.name].client and QBCore.Shared.Items[item.name].client.category then
+                table.insert(clothing, {
+                    name = item.name,
+                    label = QBCore.Shared.Items[item.name].label,
+                    slot = item.slot,
+                    metadata = item.info or {},
+                    category = QBCore.Shared.Items[item.name].client.category,
+                    rarity = QBCore.Shared.Items[item.name].client.rarity or "common"
+                })
+            end
+        end
+        
+        -- Get player's outfits
+        local citizenid = Player.PlayerData.citizenid
         local outfits = {}
         
-        if outfitsResults and #outfitsResults > 0 then
-            for _, outfit in ipairs(outfitsResults) do
+        local results = MySQL.Sync.fetchAll('SELECT * FROM player_outfits WHERE citizenid = ?', {citizenid})
+        
+        if results then
+            for _, outfit in ipairs(results) do
                 table.insert(outfits, {
                     id = outfit.id,
                     name = outfit.outfitname,
-                    items = json.decode(outfit.outfit)
+                    items = json.decode(outfit.outfit),
+                    isDefault = outfit.is_default == 1
                 })
             end
         end
         
         -- Get player's wishlist
-        MySQL.Async.fetchAll('SELECT * FROM player_wishlist WHERE citizenid = ?', {citizenid}, function(wishlistResults)
-            local wishlist = {}
+        local wishlist = {}
+        
+        local wishlistResults = MySQL.Sync.fetchAll('SELECT * FROM player_wishlist WHERE citizenid = ?', {citizenid})
+        
+        if wishlistResults then
+            for _, item in ipairs(wishlistResults) do
+                table.insert(wishlist, item.item)
+            end
+        end
+        
+        cb(clothing, outfits, wishlist)
+    end)
+    
+    -- Get player's default outfit callback
+    QBCore.Functions.CreateCallback('clothing-system:server:getDefaultOutfit', function(source, cb)
+        local src = source
+        local Player = QBCore.Functions.GetPlayer(src)
+        
+        if not Player then
+            cb(nil)
+            return
+        end
+        
+        local citizenid = Player.PlayerData.citizenid
+        
+        local result = MySQL.Sync.fetchScalar('SELECT outfit FROM player_outfits WHERE citizenid = ? AND is_default = 1 LIMIT 1', {citizenid})
+        
+        if result then
+            cb(json.decode(result))
+        else
+            cb(nil)
+        end
+    end)
+    
+    -- Get specific outfit by ID callback
+    QBCore.Functions.CreateCallback('clothing-system:server:getOutfit', function(source, cb, outfitId)
+        local src = source
+        local Player = QBCore.Functions.GetPlayer(src)
+        
+        if not Player then
+            cb(nil)
+            return
+        end
+        
+        local citizenid = Player.PlayerData.citizenid
+        
+        local result = MySQL.Sync.fetchScalar('SELECT outfit FROM player_outfits WHERE id = ? AND citizenid = ?', {outfitId, citizenid})
+        
+        if result then
+            cb(json.decode(result))
+        else
+            cb(nil)
+        end
+    end)
+    
+    -- Get dirty clothing callback
+    QBCore.Functions.CreateCallback('clothing-system:server:getDirtyClothing', function(source, cb)
+        local src = source
+        local Player = QBCore.Functions.GetPlayer(src)
+        
+        if not Player then
+            cb({})
+            return
+        end
+        
+        -- Get all dirty clothing items from player inventory
+        local dirtyClothing = {}
+        local items = Player.PlayerData.items
+        
+        for _, item in pairs(items) do
+            -- Check if it's a clothing item and is dirty
+            if item and item.name and QBCore.Shared.Items[item.name] and QBCore.Shared.Items[item.name].client and QBCore.Shared.Items[item.name].client.category then
+                local isDirty = item.info and item.info.dirty
+                
+                if isDirty then
+                    table.insert(dirtyClothing, {
+                        name = item.name,
+                        label = QBCore.Shared.Items[item.name].label,
+                        slot = item.slot,
+                        metadata = item.info or {}
+                    })
+                end
+            end
+        end
+        
+        cb(dirtyClothing)
+    end)
+    
+    -- Get damaged clothing callback
+    QBCore.Functions.CreateCallback('clothing-system:server:getDamagedClothing', function(source, cb)
+        local src = source
+        local Player = QBCore.Functions.GetPlayer(src)
+        
+        if not Player then
+            cb({})
+            return
+        end
+        
+        -- Get all damaged clothing items from player inventory
+        local damagedClothing = {}
+        local items = Player.PlayerData.items
+        
+        for _, item in pairs(items) do
+            -- Check if it's a clothing item and is damaged
+            if item and item.name and QBCore.Shared.Items[item.name] and QBCore.Shared.Items[item.name].client and QBCore.Shared.Items[item.name].client.category then
+                local condition = item.info and item.info.condition or 100
+                
+                if condition < 75 then
+                    table.insert(damagedClothing, {
+                        name = item.name,
+                        label = QBCore.Shared.Items[item.name].label,
+                        slot = item.slot,
+                        metadata = item.info or {},
+                        condition = condition
+                    })
+                end
+            end
+        end
+        
+        cb(damagedClothing)
+    end)
+    
+    -- Check if player has an item callback
+    QBCore.Functions.CreateCallback('clothing-system:server:hasItem', function(source, cb, itemName)
+        local src = source
+        local Player = QBCore.Functions.GetPlayer(src)
+        
+        if not Player then
+            cb(false)
+            return
+        end
+        
+        local hasItem = Player.Functions.GetItemByName(itemName)
+        cb(hasItem ~= nil)
+    end)
+end
+
+-- Restock store inventories
+function RestockStores()
+    for storeType, storeData in pairs(Config.Stores) do
+        local needsRestock = NeedsRestock[storeType] or false
+        
+        -- Check if it's time to restock based on last restock time or if force restock is needed
+        if needsRestock then
+            -- Restock all items
+            for itemName, stockData in pairs(StoreStock[storeType]) do
+                local rarity = stockData.rarity
+                local restock = math.random(Config.Rarity[rarity].minRestock or 1, Config.Rarity[rarity].maxRestock or 3)
+                
+                -- Add to current stock, not exceeding max stock
+                StoreStock[storeType][itemName].stock = math.min(stockData.stock + restock, stockData.maxStock)
+                StoreStock[storeType][itemName].lastRestock = os.time()
+            end
             
-            if wishlistResults and #wishlistResults > 0 then
-                for _, wishlistItem in ipairs(wishlistResults) do
-                    local item = QBCore.Shared.Items[wishlistItem.item]
-                    if item then
-                        table.insert(wishlist, {
-                            name = wishlistItem.item,
-                            label = item.label,
-                            category = item.client and item.client.category or "unknown",
-                            rarity = item.client and item.client.rarity or "common",
-                            variations = item.client and item.client.variations or {}
-                        })
+            NeedsRestock[storeType] = false
+            
+            -- Notify all players that the store has been restocked
+            TriggerClientEvent('clothing-system:client:updateStores', -1)
+        else
+            -- Randomly check if we should restock
+            if math.random() < 0.3 then -- 30% chance to restock when periodic check happens
+                -- Loop items to see which ones need restocking
+                local anyRestocked = false
+                
+                for itemName, stockData in pairs(StoreStock[storeType]) do
+                    if stockData.stock < stockData.maxStock * 0.5 then -- Below 50% stock
+                        local rarity = stockData.rarity
+                        local restock = math.random(Config.Rarity[rarity].minRestock or 1, Config.Rarity[rarity].maxRestock or 3)
+                        
+                        -- Add to current stock, not exceeding max stock
+                        StoreStock[storeType][itemName].stock = math.min(stockData.stock + restock, stockData.maxStock)
+                        StoreStock[storeType][itemName].lastRestock = os.time()
+                        anyRestocked = true
+                    end
+                end
+                
+                if anyRestocked then
+                    -- Notify all players that the store has been restocked
+                    TriggerClientEvent('clothing-system:client:updateStores', -1)
+                end
+            end
+        end
+    end
+end
+
+-- Update clothing condition for all active players
+function UpdateClothingCondition()
+    -- Loop through all connected players
+    for _, serverId in ipairs(GetPlayers()) do
+        local src = tonumber(serverId)
+        local Player = QBCore.Functions.GetPlayer(src)
+        
+        if Player then
+            -- Loop through all items in player's inventory
+            for _, item in pairs(Player.PlayerData.items) do
+                -- Check if it's a clothing item
+                if item and item.name and QBCore.Shared.Items[item.name] and QBCore.Shared.Items[item.name].client and QBCore.Shared.Items[item.name].client.category then
+                    -- Check if it's currently worn
+                    local isWorn = false
+                    
+                    -- Get metadata
+                    local metadata = item.info or {}
+                    local condition = metadata.condition or 100
+                    local lastWorn = metadata.lastWorn or 0
+                    
+                    -- Check if we have a player-specific degradation interval
+                    local playerId = src
+                    if not DegradationIntervals[playerId] then
+                        DegradationIntervals[playerId] = {}
+                    end
+                    
+                    if not DegradationIntervals[playerId][item.name] then
+                        DegradationIntervals[playerId][item.name] = os.time() + math.random(Config.ConditionUpdateInterval * 60, Config.ConditionUpdateInterval * 120) -- Random interval between update interval and 2x that
+                    end
+                    
+                    -- Check if it's time to degrade this item
+                    if os.time() >= DegradationIntervals[playerId][item.name] then
+                        -- Trigger callback to check if the item is worn by the player
+                        TriggerClientEvent('clothing-system:client:checkIfWorn', src, item.name, function(worn)
+                            isWorn = worn
+                            
+                            -- Degrade condition based on whether it's worn
+                            local degradation = 0
+                            
+                            if isWorn then
+                                -- Higher degradation for worn items
+                                degradation = math.random(Config.WornDegradationMin, Config.WornDegradationMax)
+                            else
+                                -- Lower degradation for stored items
+                                degradation = math.random(Config.StoredDegradationMin, Config.StoredDegradationMax)
+                            end
+                            
+                            -- Apply degradation
+                            local newCondition = math.max(0, condition - degradation)
+                            
+                            -- Update item metadata
+                            metadata.condition = newCondition
+                            
+                            -- Check if the item should become dirty
+                            if isWorn and math.random() < Config.DirtyChance then
+                                metadata.dirty = true
+                            end
+                            
+                            -- Update item in inventory
+                            Player.Functions.SetItemMetaData(item.slot, metadata)
+                            
+                            -- Update last worn timestamp if the item is currently worn
+                            if isWorn then
+                                metadata.lastWorn = os.time()
+                                
+                                -- Update item in inventory again with the new lastWorn
+                                Player.Functions.SetItemMetaData(item.slot, metadata)
+                                
+                                -- Notify player if condition is getting low
+                                if newCondition < condition and (newCondition <= 25 or newCondition <= 10) then
+                                    TriggerClientEvent('clothing-system:client:clothingDamaged', src, item.name, newCondition)
+                                end
+                            end
+                            
+                            -- Reset interval
+                            DegradationIntervals[playerId][item.name] = os.time() + math.random(Config.ConditionUpdateInterval * 60, Config.ConditionUpdateInterval * 120)
+                        end)
                     end
                 end
             end
-            
-            cb(clothing, outfits, wishlist)
-        end)
-    end)
-end)
+        end
+    end
+end
 
--- Get dirty clothing (condition < 50)
-QBCore.Functions.CreateCallback('clothing-system:server:getDirtyClothing', function(source, cb)
+-- Player purchased an item
+function PurchaseItem(source, itemName, storeType)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     
     if not Player then
-        cb(false)
-        return
+        return false, "Player not found"
     end
     
-    local dirtyClothing = {}
-    
-    for _, item in pairs(Player.PlayerData.items) do
-        if item and item.name and QBCore.Shared.Items[item.name] and QBCore.Shared.Items[item.name].client and 
-           QBCore.Shared.Items[item.name].client.category then
-            -- Check if item is dirty (condition < 50)
-            local condition = item.info and item.info.condition or 100
-            if condition < 50 then
-                table.insert(dirtyClothing, {
-                    name = item.name,
-                    label = item.label,
-                    slot = item.slot,
-                    condition = condition,
-                    rarity = QBCore.Shared.Items[item.name].client and QBCore.Shared.Items[item.name].client.rarity or "common"
-                })
-            end
-        end
+    if not StoreStock[storeType] or not StoreStock[storeType][itemName] then
+        return false, "Item not available in this store"
     end
     
-    cb(dirtyClothing)
-end)
-
--- Get damaged clothing (condition < 30)
-QBCore.Functions.CreateCallback('clothing-system:server:getDamagedClothing', function(source, cb)
-    local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
-    
-    if not Player then
-        cb(false)
-        return
+    -- Check if item is in stock
+    if StoreStock[storeType][itemName].stock <= 0 then
+        return false, "Item out of stock"
     end
     
-    local damagedClothing = {}
-    
-    for _, item in pairs(Player.PlayerData.items) do
-        if item and item.name and QBCore.Shared.Items[item.name] and QBCore.Shared.Items[item.name].client and 
-           QBCore.Shared.Items[item.name].client.category then
-            -- Check if item is damaged (condition < 30)
-            local condition = item.info and item.info.condition or 100
-            if condition < 30 then
-                table.insert(damagedClothing, {
-                    name = item.name,
-                    label = item.label,
-                    slot = item.slot,
-                    condition = condition,
-                    rarity = QBCore.Shared.Items[item.name].client and QBCore.Shared.Items[item.name].client.rarity or "common"
-                })
-            end
-        end
-    end
-    
-    cb(damagedClothing)
-end)
-
--- Wash clothing
-QBCore.Functions.CreateCallback('clothing-system:server:washClothing', function(source, cb, itemName)
-    local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
-    
-    if not Player then
-        cb(false, "Player not found")
-        return
-    end
-    
-    -- Find item in inventory
-    local item = nil
-    for _, invItem in pairs(Player.PlayerData.items) do
-        if invItem and invItem.name == itemName then
-            item = invItem
-            break
-        end
-    end
-    
-    if not item then
-        cb(false, "Item not found in inventory")
-        return
-    end
-    
-    -- Check if player has enough money
-    if Player.PlayerData.money["cash"] < Config.Condition.washCost then
-        cb(false, "Not enough money")
-        return
-    end
-    
-    -- Get current condition
-    local condition = item.info and item.info.condition or 100
-    
-    -- Check if washing is needed
-    if condition >= 95 then
-        cb(false, "This item doesn't need washing")
-        return
-    end
-    
-    -- Remove money
-    if Player.Functions.RemoveMoney("cash", Config.Condition.washCost) then
-        -- Update item condition
-        local info = item.info or {}
-        info.condition = math.min(95, condition + 50) -- Washing improves condition by 50%, max 95%
-        
-        -- Update item in inventory
-        Player.Functions.UpdateItemInfo(item.slot, info)
-        
-        -- Update in database
-        TriggerEvent('clothing-system:server:syncClothingCondition', src, itemName, info.condition)
-        
-        cb(true)
-    else
-        cb(false, "Transaction failed")
-    end
-end)
-
--- Repair clothing
-QBCore.Functions.CreateCallback('clothing-system:server:repairClothing', function(source, cb, itemName)
-    local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
-    
-    if not Player then
-        cb(false, "Player not found")
-        return
-    end
-    
-    -- Find item in inventory
-    local item = nil
-    for _, invItem in pairs(Player.PlayerData.items) do
-        if invItem and invItem.name == itemName then
-            item = invItem
-            break
-        end
-    end
-    
-    if not item then
-        cb(false, "Item not found in inventory")
-        return
-    end
-    
-    -- Get item rarity for repair cost
-    local itemData = QBCore.Shared.Items[itemName]
-    local rarity = itemData and itemData.client and itemData.client.rarity or "common"
-    local repairCost = Config.Condition.repairCosts[rarity] or Config.Condition.repairCosts.common
-    
-    -- Check if player has enough money
-    if Player.PlayerData.money["cash"] < repairCost then
-        cb(false, "Not enough money (Costs $" .. repairCost .. ")")
-        return
-    end
-    
-    -- Get current condition
-    local condition = item.info and item.info.condition or 100
-    
-    -- Check if repair is needed
-    if condition >= 95 then
-        cb(false, "This item doesn't need repairs")
-        return
-    end
-    
-    -- Remove money
-    if Player.Functions.RemoveMoney("cash", repairCost) then
-        -- Update item condition to 100%
-        local info = item.info or {}
-        info.condition = 100
-        
-        -- Update item in inventory
-        Player.Functions.UpdateItemInfo(item.slot, info)
-        
-        -- Update in database
-        TriggerEvent('clothing-system:server:syncClothingCondition', src, itemName, info.condition)
-        
-        cb(true)
-    else
-        cb(false, "Transaction failed")
-    end
-end)
-
--- Update wishlist event
-RegisterNetEvent('clothing-system:server:updateWishlist', function(wishlist)
-    local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
-    
-    if not Player then return end
-    
-    local citizenid = Player.PlayerData.citizenid
-    
-    -- Delete current wishlist items for this player
-    MySQL.Async.execute('DELETE FROM player_wishlist WHERE citizenid = ?', {citizenid})
-    
-    -- Add new wishlist items
-    for _, item in ipairs(wishlist) do
-        MySQL.Async.execute('INSERT INTO player_wishlist (citizenid, item) VALUES (?, ?)', {citizenid, item.name})
-    end
-end)
-
--- Save outfit event
-RegisterNetEvent('clothing-system:server:saveOutfit', function(outfit)
-    local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
-    
-    if not Player then return end
-    
-    local citizenid = Player.PlayerData.citizenid
-    local outfitName = outfit.name
-    local outfitItems = json.encode(outfit.items)
-    
-    -- Check if player has reached outfit limit
-    MySQL.Async.fetchScalar('SELECT COUNT(*) FROM player_outfits WHERE citizenid = ?', {citizenid}, function(count)
-        if count >= Config.MaxOutfits then
-            TriggerClientEvent('QBCore:Notify', src, "You've reached the maximum number of outfits (" .. Config.MaxOutfits .. ")", "error")
-            return
-        end
-        
-        -- Save new outfit
-        MySQL.Async.execute('INSERT INTO player_outfits (citizenid, outfitname, outfit) VALUES (?, ?, ?)', 
-            {citizenid, outfitName, outfitItems})
-            
-        TriggerClientEvent('QBCore:Notify', src, "Outfit saved: " .. outfitName, "success")
-    end)
-end)
-
--- Wear saved outfit event
-RegisterNetEvent('clothing-system:server:wearOutfit', function(outfitName)
-    local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
-    
-    if not Player then return end
-    
-    local citizenid = Player.PlayerData.citizenid
-    
-    -- Find outfit by name
-    MySQL.Async.fetchAll('SELECT * FROM player_outfits WHERE citizenid = ? AND outfitname = ?', {citizenid, outfitName}, function(results)
-        if not results or #results == 0 then
-            TriggerClientEvent('QBCore:Notify', src, "Outfit not found: " .. outfitName, "error")
-            return
-        end
-        
-        local outfit = json.decode(results[1].outfit)
-        
-        -- Check if player has all the items in the outfit
-        local hasAllItems = true
-        local missingItems = {}
-        
-        for _, item in ipairs(outfit) do
-            if not Player.Functions.HasItem(item.name) then
-                hasAllItems = false
-                table.insert(missingItems, QBCore.Shared.Items[item.name].label)
-            end
-        end
-        
-        if not hasAllItems then
-            TriggerClientEvent('QBCore:Notify', src, "Missing items: " .. table.concat(missingItems, ", "), "error")
-            return
-        end
-        
-        -- Send event to client to apply the outfit
-        TriggerClientEvent('clothing-system:client:applyOutfit', src, outfit)
-        TriggerClientEvent('QBCore:Notify', src, "Wearing outfit: " .. outfitName, "success")
-    end)
-end)
-
--- Degrade clothing condition event
-RegisterNetEvent('clothing-system:server:degradeClothing', function(itemName, amount)
-    local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
-    
-    if not Player or not Config.Condition.enabled then return end
-    
-    -- Find item in inventory
-    for slot, item in pairs(Player.PlayerData.items) do
-        if item and item.name == itemName then
-            -- Update condition
-            local info = item.info or {}
-            local currentCondition = info.condition or 100
-            local newCondition = math.max(0, currentCondition - amount)
-            
-            info.condition = newCondition
-            Player.Functions.UpdateItemInfo(slot, info)
-            
-            -- Sync condition to database
-            TriggerEvent('clothing-system:server:syncClothingCondition', src, itemName, newCondition)
-            
-            -- Notify player of very damaged clothing
-            if newCondition <= 10 and currentCondition > 10 then
-                TriggerClientEvent('QBCore:Notify', src, "Your " .. QBCore.Shared.Items[itemName].label .. " is severely damaged and needs repairs", "error")
-            elseif newCondition <= 30 and currentCondition > 30 then
-                TriggerClientEvent('QBCore:Notify', src, "Your " .. QBCore.Shared.Items[itemName].label .. " is damaged and should be repaired", "warning")
-            elseif newCondition <= 50 and currentCondition > 50 then
-                TriggerClientEvent('QBCore:Notify', src, "Your " .. QBCore.Shared.Items[itemName].label .. " is dirty and could use a wash", "primary")
-            end
-            
-            break
-        end
-    end
-end)
-
--- Sync clothing condition to database
-RegisterNetEvent('clothing-system:server:syncClothingCondition', function(playerId, itemName, condition)
-    local Player = QBCore.Functions.GetPlayer(playerId)
-    
-    if not Player then return end
-    
-    local citizenid = Player.PlayerData.citizenid
-    
-    -- Update condition in database
-    MySQL.Async.execute('INSERT INTO player_clothing_condition (citizenid, item, condition, last_worn) VALUES (?, ?, ?, CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE condition = ?, last_worn = CURRENT_TIMESTAMP',
-        {citizenid, itemName, condition, condition})
-end)
-
--- Register server export functions
-exports('addClothingItem', function(source, itemName)
-    local Player = QBCore.Functions.GetPlayer(source)
-    if not Player then return false end
-    
+    -- Calculate price
     local item = QBCore.Shared.Items[itemName]
-    if not item then return false end
+    if not item then
+        return false, "Item not found"
+    end
     
-    -- Add item with default metadata
+    local stockData = StoreStock[storeType][itemName]
+    local rarityMultiplier = Config.Rarity[stockData.rarity].priceMultiplier or 1.0
+    local storeMultiplier = Config.Stores[storeType].priceMultiplier or 1.0
+    local price = math.floor((item.price or 100) * rarityMultiplier * storeMultiplier)
+    
+    -- Check if player has enough money
+    local playerMoney = Player.PlayerData.money.cash
+    if playerMoney < price then
+        return false, "Not enough money"
+    end
+    
+    -- Remove money
+    if not Player.Functions.RemoveMoney('cash', price) then
+        return false, "Failed to remove money"
+    end
+    
+    -- Add item to player inventory with metadata
     local metadata = {
-        condition = 100
+        condition = 100,
+        lastWorn = 0,
+        dirty = false,
+        variation = 0
     }
     
-    return Player.Functions.AddItem(itemName, 1, nil, metadata)
+    local success = Player.Functions.AddItem(itemName, 1, nil, metadata)
+    
+    if not success then
+        -- Refund money if item couldn't be added
+        Player.Functions.AddMoney('cash', price)
+        return false, "Inventory full"
+    end
+    
+    -- Reduce stock
+    StoreStock[storeType][itemName].stock = StoreStock[storeType][itemName].stock - 1
+    
+    -- Check if store needs restock
+    local needsRestock = true
+    for _, stockData in pairs(StoreStock[storeType]) do
+        if stockData.stock > 0 then
+            needsRestock = false
+            break
+        end
+    end
+    
+    if needsRestock then
+        NeedsRestock[storeType] = true
+    end
+    
+    -- Notify player
+    TriggerClientEvent('clothing-system:client:itemPurchased', src, itemName, Config.Stores[storeType].label)
+    
+    return true, "Purchase successful"
+end
+
+-- Initialize on resource start
+AddEventHandler('onResourceStart', function(resourceName)
+    if GetCurrentResourceName() ~= resourceName then return end
+    Initialize()
 end)
 
-exports('removeClothingItem', function(source, itemName)
-    local Player = QBCore.Functions.GetPlayer(source)
-    if not Player then return false end
+-- Expose functions for export
+exports('purchaseItem', PurchaseItem)
+exports('restockStore', function(storeType)
+    if not StoreStock[storeType] then
+        return false, "Store not found"
+    end
     
-    return Player.Functions.RemoveItem(itemName, 1)
+    NeedsRestock[storeType] = true
+    RestockStores()
+    return true, "Store restocked"
 end)
 
-exports('getPlayerOutfits', function(source)
-    local Player = QBCore.Functions.GetPlayer(source)
-    if not Player then return {} end
+exports('addShopItem', function(storeType, itemName, amount)
+    if not StoreStock[storeType] then
+        return false, "Store not found"
+    end
     
-    local citizenid = Player.PlayerData.citizenid
-    local outfits = {}
+    if not QBCore.Shared.Items[itemName] then
+        return false, "Item not found"
+    end
     
-    local results = MySQL.Sync.fetchAll('SELECT * FROM player_outfits WHERE citizenid = ?', {citizenid})
+    if not StoreStock[storeType][itemName] then
+        -- Get rarity
+        local rarity = QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.rarity or "common"
+        local maxStock = Config.Rarity[rarity].maxStock or 10
+        
+        -- Add to store inventory
+        StoreStock[storeType][itemName] = {
+            stock = amount or 1,
+            maxStock = maxStock,
+            rarity = rarity,
+            lastRestock = os.time()
+        }
+        
+        -- Add to store config for persistence
+        table.insert(Config.Stores[storeType].inventory, itemName)
+    else
+        -- Add to existing stock
+        local currentStock = StoreStock[storeType][itemName].stock
+        local maxStock = StoreStock[storeType][itemName].maxStock
+        
+        StoreStock[storeType][itemName].stock = math.min(currentStock + (amount or 1), maxStock)
+    end
     
-    if results then
-        for _, outfit in ipairs(results) do
-            table.insert(outfits, {
-                id = outfit.id,
-                name = outfit.outfitname,
-                items = json.decode(outfit.outfit)
+    return true, "Item added to store"
+end)
+
+exports('removeShopItem', function(storeType, itemName, amount)
+    if not StoreStock[storeType] or not StoreStock[storeType][itemName] then
+        return false, "Item not found in store"
+    end
+    
+    local currentStock = StoreStock[storeType][itemName].stock
+    local removeAmount = amount or currentStock
+    
+    if removeAmount >= currentStock then
+        -- Remove from inventory table
+        for i, item in ipairs(Config.Stores[storeType].inventory) do
+            if item == itemName then
+                table.remove(Config.Stores[storeType].inventory, i)
+                break
+            end
+        end
+        
+        -- Remove from stock
+        StoreStock[storeType][itemName] = nil
+    else
+        -- Reduce stock
+        StoreStock[storeType][itemName].stock = currentStock - removeAmount
+    end
+    
+    return true, "Item removed from store"
+end)
+
+-- Function to get all clothing items in the game
+exports('getAllClothing', function()
+    local clothing = {}
+    
+    for name, item in pairs(QBCore.Shared.Items) do
+        if item.client and item.client.category then
+            table.insert(clothing, {
+                name = name,
+                label = item.label,
+                category = item.client.category,
+                rarity = item.client.rarity or "common",
+                description = item.description or "",
+                price = item.price or 100
             })
         end
     end
     
-    return outfits
+    return clothing
 end) 
