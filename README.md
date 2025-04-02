@@ -10,6 +10,7 @@ A simple and powerful clothing system for your FiveM server that lets players bu
 - Wash dirty clothes at laundromats
 - Repair damaged clothes at tailors
 - Simple UI that's easy to use
+- Support for all types of clothing (GTA default and addon)
 
 ### Cool Extras
 - Clothes get dirty and damaged over time
@@ -17,6 +18,7 @@ A simple and powerful clothing system for your FiveM server that lets players bu
 - Some clothes are rare and hard to find
 - Stores restock their items automatically
 - Preview clothes before buying
+- Full addon clothing support
 
 ## 🚀 Quick Start Guide
 
@@ -82,6 +84,78 @@ CREATE TABLE IF NOT EXISTS `player_wishlist` (
 3. Select damaged clothes to repair
 4. Pay the repair cost
 
+## 👕 Adding Custom Clothing
+
+### Adding Default GTA Clothing
+```lua
+['tshirt_white'] = {
+    name = 'tshirt_white',
+    label = 'White T-Shirt',
+    weight = 200,
+    type = 'item',
+    image = 'tshirt_white.png',
+    unique = true,
+    useable = true,
+    shouldClose = true,
+    description = 'A simple white t-shirt',
+    client = {
+        category = 'torso',
+        component = 11,
+        drawable = 0,
+        texture = 0,
+        rarity = 'common'
+    }
+}
+```
+
+### Adding Addon Clothing
+```lua
+['addon_jacket_1'] = {
+    name = 'addon_jacket_1',
+    label = 'Addon Jacket 1',
+    weight = 400,
+    type = 'item',
+    image = 'addon_jacket_1.png',
+    unique = true,
+    useable = true,
+    shouldClose = true,
+    description = 'A cool addon jacket',
+    client = {
+        category = 'torso',
+        component = 11,
+        isAddon = true,
+        model = 'addon_jacket_1',
+        drawable = 0,
+        texture = 0,
+        rarity = 'rare'
+    }
+}
+```
+
+### Adding Addon Props (Hats, Glasses, etc.)
+```lua
+['addon_hat_1'] = {
+    name = 'addon_hat_1',
+    label = 'Addon Hat 1',
+    weight = 200,
+    type = 'item',
+    image = 'addon_hat_1.png',
+    unique = true,
+    useable = true,
+    shouldClose = true,
+    description = 'A cool addon hat',
+    client = {
+        category = 'hat',
+        type = 'prop',
+        isAddon = true,
+        model = 'addon_hat_1',
+        drawable = 0,
+        texture = 0,
+        rarity = 'uncommon'
+    }
+}
+```
+
 ## ⚙️ Configuration
 
 All settings are in `config.lua`. Here are the main things you can change:
@@ -136,6 +210,9 @@ Config.Condition = {
 ### Q: How do I add new clothes?
 A: Add them to your QB-Core shared items and then add them to the store's inventory in `config.lua`
 
+### Q: How do I add addon clothing?
+A: Set `isAddon = true` in the item's client configuration and provide the model name
+
 ### Q: How do I change store locations?
 A: Edit the `locations` in `config.lua` for each store
 
@@ -151,6 +228,7 @@ A: Copy an existing store in `config.lua` and change its settings
 - Make sure the items are in your QB-Core shared items
 - Check that the store has the items in its inventory
 - Verify the database tables are created
+- For addon clothing, ensure the model is properly loaded
 
 ### Problem: Can't save outfits
 - Check if the database tables are created
@@ -161,6 +239,11 @@ A: Copy an existing store in `config.lua` and change its settings
 - Make sure all dependencies are installed
 - Check if ox_lib is running
 - Verify the resource is started in server.cfg
+
+### Problem: Addon clothing doesn't work
+- Verify the model name is correct
+- Check if the addon resource is properly installed
+- Ensure the addon resource is started before vein-clothing
 
 ## 📝 Support
 
