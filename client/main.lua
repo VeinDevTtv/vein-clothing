@@ -763,7 +763,7 @@ Citizen.CreateThread(function()
     
     -- Try to get CircleZone from the exports
     local success, result = pcall(function()
-        return exports[GetCurrentResourceName()]:CreateSafeCircleZone
+        return exports[GetCurrentResourceName()]:CreateSafeCircleZone()
     end)
     
     if success and result then

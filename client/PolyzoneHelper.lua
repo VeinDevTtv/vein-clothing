@@ -15,34 +15,40 @@ Citizen.CreateThread(function()
     if GetResourceState('PolyZone') ~= 'missing' then
         -- Try to get CircleZone from PolyZone in different ways
         local success, result = pcall(function()
-            -- First try the direct CircleZone export if available
-            if exports['PolyZone'].CircleZone then
-                return exports['PolyZone'].CircleZone
-            end
-            
-            -- Next try creating a CircleZone directly
-            local testZone = exports['PolyZone']:CreateZone('circle', {
-                center = vector3(0, 0, 0),
-                radius = 1.0,
-                options = { name = "test" }
-            })
-            
-            -- Clean up test zone
-            if testZone and testZone.destroy then
-                testZone:destroy()
-            end
-            
-            -- Return a wrapper that matches our expected interface
-            return {
-                Create = function(coords, radius, options)
-                    return exports['PolyZone']:CreateZone('circle', {
-                        center = coords,
-                        radius = radius,
-                        options = options or {}
-                    })
-                end
-            }
+            -- Try using the CircleZone directly from the PolyZone resource
+            return exports['PolyZone']:CircleZone()
         end)
+        
+        if not success or not result then
+            -- First attempt failed, try alternative method
+            success, result = pcall(function()
+                -- Try again with specific CircleZone function
+                return {
+                    Create = function(coords, radius, options)
+                        -- Match the signature from CircleZone.lua
+                        return exports['PolyZone']:CircleZone(coords, radius, options or {})
+                    end
+                }
+            end)
+        end
+        
+        if not success or not result then
+            -- Try one more approach based on the actual CircleZone.lua implementation
+            success, result = pcall(function()
+                return {
+                    Create = function(coords, radius, options)
+                        options = options or {}
+                        return exports['PolyZone']:Create({
+                            center = coords,
+                            radius = radius,
+                            useZ = options.useZ or false,
+                            debugPoly = options.debugPoly or false,
+                            name = options.name or "circle_zone"
+                        }, "circle")
+                    end
+                }
+            end)
+        end
         
         if success and result then
             -- Successfully created our wrapper
