@@ -1163,10 +1163,15 @@ function OpenClothingStore(storeName)
     print("^2[vein-clothing] Player gender: " .. gender .. "^7")
     
     -- Get player money
-    local playerMoney = 0
+    local playerMoney = {
+        cash = 0,
+        bank = 0
+    }
+
     local playerData = QBCore.Functions.GetPlayerData()
     if playerData and playerData.money then
-        playerMoney = playerData.money.cash or 0
+        playerMoney.cash = playerData.money.cash or 0
+        playerMoney.bank = playerData.money.bank or 0
     end
     
     -- First, initialize UI with debug mode setting
@@ -1230,6 +1235,11 @@ function OpenClothingStore(storeName)
             wishlistItems = wishlist or {},
             debug = Config.Debug or false
         })
+        
+        -- Double-check the money values after a small delay to ensure they're accurate
+        Citizen.SetTimeout(200, function()
+            UpdateMoneyDisplay()
+        end)
         
         -- Verify UI state after brief delay
         Citizen.SetTimeout(500, function()
@@ -1354,8 +1364,8 @@ RegisterNUICallback('purchaseItem', function(data, cb)
                 SendNUIMessage({
                     type = "updateMoney",
                     money = {
-                        cash = playerData.money.cash,
-                        bank = playerData.money.bank
+                        cash = playerData.money.cash or 0,
+                        bank = playerData.money.bank or 0
                     }
                 })
             end
@@ -2254,4 +2264,41 @@ function AreValidCoords(x, y, z)
     -- Check if all values are numbers and not zero at the same time
     return type(x) == "number" and type(y) == "number" and type(z) == "number" and
            (x ~= 0 or y ~= 0 or z ~= 0) -- At least one coordinate should be non-zero
+end
+
+-- Register event to update playerData
+RegisterNetEvent('QBCore:Player:SetPlayerData', function(newPlayerData)
+    if newPlayerData then 
+        PlayerData = newPlayerData
+        
+        -- Update money in UI if store is open
+        if isInClothingStore then
+            SendNUIMessage({
+                type = "updateMoney",
+                money = {
+                    cash = PlayerData.money.cash or 0,
+                    bank = PlayerData.money.bank or 0
+                }
+            })
+        end
+    end
+end)
+
+-- Function to update UI money display
+function UpdateMoneyDisplay()
+    local playerData = QBCore.Functions.GetPlayerData()
+    if playerData and playerData.money then
+        SendNUIMessage({
+            type = "updateMoney",
+            money = {
+                cash = playerData.money.cash or 0,
+                bank = playerData.money.bank or 0
+            }
+        })
+        
+        if Config.Debug then
+            print("^2[vein-clothing] Updated money display: Cash $" .. tostring(playerData.money.cash) .. 
+                  ", Bank $" .. tostring(playerData.money.bank) .. "^7")
+        end
+    end
 end
