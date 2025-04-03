@@ -901,7 +901,7 @@ RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     -- Wait for resource to be fully ready before loading player outfit
     Citizen.CreateThread(function()
         -- Add a longer delay to let other handlers finish
-        Citizen.Wait(10000)
+        Citizen.Wait(12000) -- Increased from 10000ms to 12000ms
         
         -- Safely attempt to load player outfit
         pcall(function()
@@ -1879,8 +1879,8 @@ AddEventHandler('onClientResourceStart', function(resourceName)
     
     -- Wait a moment for the config to be fully loaded before initializing
     Citizen.CreateThread(function()
-        -- Wait longer to ensure all script functions are fully defined
-        Citizen.Wait(5000)
+        -- Wait much longer to ensure player is fully spawned
+        Citizen.Wait(15000) -- Increased from 5000 to 15000 ms
         
         -- Make sure our critical functions are defined
         if type(LoadStores) ~= "function" then
@@ -1901,6 +1901,37 @@ AddEventHandler('onClientResourceStart', function(resourceName)
         
         print("^2[vein-clothing] Starting core initialization process...^7")
         Initialize()
+        
+        -- Add a second attempt to load stores after a longer delay if auto-start failed
+        Citizen.CreateThread(function()
+            -- Wait additional time (25 seconds total) to ensure player is fully loaded
+            Citizen.Wait(10000)
+            
+            -- Check if any NPCs were loaded
+            local npcCount = 0
+            for _, _ in pairs(storeNPCs or {}) do
+                npcCount = npcCount + 1
+            end
+            
+            -- If no NPCs were loaded in the first attempt, try again
+            if npcCount == 0 then
+                print("^3[vein-clothing] No store NPCs were loaded in first attempt. Trying again...^7")
+                
+                -- Force call LoadStores again
+                local success = pcall(function()
+                    LoadStores()
+                end)
+                
+                if success then
+                    print("^2[vein-clothing] Second attempt to load stores succeeded!^7")
+                else
+                    print("^1[ERROR] Second attempt to load stores failed!^7")
+                    print("^3[vein-clothing] You can manually reload stores with /reloadstores command^7")
+                end
+            else
+                print("^2[vein-clothing] Store NPCs were successfully loaded in first attempt: " .. npcCount .. " NPCs^7")
+            end
+        end)
     end)
 end)
 
