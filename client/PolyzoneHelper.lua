@@ -6,9 +6,36 @@ local polyzoneLoaded = false
 
 -- Mock CircleZone implementation that will be used if PolyZone is not available
 local function CreateLocalCircleZone(center, radius, options)
-    options = options or {}
+    -- Validate all parameters to prevent null values
+    if not center then
+        print("^1[ERROR] Nil center in CreateLocalCircleZone. Using default vector3(0,0,0)^7")
+        center = vector3(0.0, 0.0, 0.0)
+    elseif type(center) ~= "vector3" then
+        -- Try to create a vector3 from a table
+        if type(center) == "table" and center.x ~= nil and center.y ~= nil then
+            local x = tonumber(center.x) or 0.0
+            local y = tonumber(center.y) or 0.0
+            local z = tonumber(center.z) or 0.0
+            center = vector3(x, y, z)
+        else
+            print("^1[ERROR] Invalid center in CreateLocalCircleZone. Using default vector3(0,0,0)^7")
+            center = vector3(0.0, 0.0, 0.0)
+        end
+    end
     
-    -- Create a basic zone structure
+    -- Ensure radius is valid
+    if not radius or type(radius) ~= "number" or radius <= 0 then
+        print("^1[ERROR] Invalid radius in CreateLocalCircleZone. Using default 1.0^7")
+        radius = 1.0
+    end
+    
+    -- Ensure options is a table
+    options = options or {}
+    if type(options) ~= "table" then
+        options = {}
+    end
+    
+    -- Create a basic zone structure with validated parameters
     local zone = {
         name = options.name or "mock_circle",
         center = center,
@@ -24,10 +51,27 @@ local function CreateLocalCircleZone(center, radius, options)
         end,
         
         isPointInside = function(self, point)
-            -- Simple 2D distance check
+            -- Validate point to prevent null errors
             if not point then return false end
-            local dx = point.x - center.x
-            local dy = point.y - center.y
+            
+            -- Ensure point is vector3 or has x,y properties
+            local px, py, pz
+            if type(point) == "vector3" then
+                px, py = point.x, point.y
+            elseif type(point) == "table" and point.x ~= nil and point.y ~= nil then
+                px, py = point.x, point.y
+            else
+                return false
+            end
+            
+            -- Ensure center is valid before using it
+            if not center or not center.x or not center.y then
+                return false
+            end
+            
+            -- Simple 2D distance check with null safety
+            local dx = px - center.x
+            local dy = py - center.y
             return (dx * dx + dy * dy) <= (radius * radius)
         end
     }

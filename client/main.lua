@@ -779,19 +779,46 @@ Citizen.CreateThread(function()
     -- Try to get CircleZone from the exports
     local success, result = pcall(function()
         -- Get the function reference first
-        local createFunc = exports[GetCurrentResourceName()]:CreateSafeCircleZone
+        local createFunc = exports[GetCurrentResourceName()].CreateSafeCircleZone
         
         -- Make sure it's a function before we try to call it
         if type(createFunc) ~= "function" then
+            print("^1[ERROR] CreateSafeCircleZone export is not a function^7")
             return nil
         end
         
+        -- Create a valid vector3 for testing
+        local testCoords = vector3(0.0, 0.0, 0.0)
+        
+        -- Ensure we're creating a valid test vector
+        if not testCoords or type(testCoords) ~= "vector3" then
+            print("^1[ERROR] Failed to create test vector3^7")
+            testCoords = vector3(0.0, 0.0, 0.0) -- Try again with explicit values
+        end
+        
         -- Try calling it with test parameters to validate it works
-        local testZone = createFunc(vector3(0, 0, 0), 1.0, {name = "test_zone"})
+        print("^3[DEBUG] Attempting to create test zone with coords: " .. 
+            tostring(testCoords.x) .. ", " .. 
+            tostring(testCoords.y) .. ", " .. 
+            tostring(testCoords.z) .. "^7")
+            
+        local testZone = createFunc(testCoords, 1.0, {name = "test_zone"})
+        
+        -- Validate the test zone
+        if not testZone then
+            print("^1[ERROR] Test zone creation returned nil^7")
+            return nil
+        end
         
         -- Clean up test zone if it was created
-        if testZone and type(testZone.destroy) == "function" then
-            testZone:destroy()
+        if type(testZone) == "table" and type(testZone.destroy) == "function" then
+            local destroySuccess = pcall(function()
+                testZone:destroy()
+            end)
+            
+            if not destroySuccess then
+                print("^3[WARNING] Failed to destroy test zone^7")
+            end
         end
         
         -- Return the function for future use
@@ -1614,7 +1641,7 @@ function Initialize()
     print("^2[vein-clothing] Starting initialization process...^7")
     
     -- Safety check to ensure we're not running too early
-    Citizen.Wait(1000) -- Wait 1 second before even attempting initialization
+    Citizen.Wait(3000) -- Increased wait from 1000ms to 3000ms before even attempting initialization
     
     -- Wait for QBCore to be fully initialized
     local qbCoreAttempts = 0
@@ -1635,7 +1662,7 @@ function Initialize()
     local playerDataAttempts = 0
     local playerData = nil
     
-    while playerDataAttempts < 150 do  -- 15 second timeout
+    while playerDataAttempts < 200 do  -- 20 second timeout (increased from 15)
         Citizen.Wait(100)
         playerDataAttempts = playerDataAttempts + 1
         
@@ -1645,18 +1672,18 @@ function Initialize()
         end)
         
         -- Check if we have valid player data
-        if playerData and playerData.citizenid then
+        if playerData and playerData.citizenid and playerData.citizenid ~= "" then
             break
         end
         
         -- Log progress every second
         if playerDataAttempts % 10 == 0 and Config and Config.Debug then
-            print("^3[vein-clothing] Waiting for player data... Attempt " .. playerDataAttempts .. "/150^7")
+            print("^3[vein-clothing] Waiting for player data... Attempt " .. playerDataAttempts .. "/200^7")
         end
     end
     
     if not playerData or not playerData.citizenid then
-        print("^1[ERROR] Failed to get player data after 15 seconds. Continuing with partial initialization.^7")
+        print("^1[ERROR] Failed to get player data after 20 seconds. Continuing with partial initialization.^7")
     else
         PlayerData = playerData
         print("^2[vein-clothing] Player data loaded successfully.^7")
@@ -1696,24 +1723,58 @@ function Initialize()
         return Config.Items or Config -- Return the clothing configuration
     end)
     
-    -- Check if player ped exists before continuing
-    local playerPed = SafePlayerPedId()
-    if playerPed == 0 then
-        print("^1[ERROR] Player ped is invalid during initialization. Delaying store loading.^7")
-        -- Will continue with longer delay below
+    -- Wait for player ped to be fully loaded and valid
+    print("^3[vein-clothing] Waiting for player ped to initialize...^7")
+    local pedWaitAttempts = 0
+    local validPed = false
+    
+    while pedWaitAttempts < 100 do -- 10 second timeout
+        -- Check if player ped is valid
+        local ped = PlayerPedId()
+        if ped and ped > 0 and DoesEntityExist(ped) then
+            validPed = true
+            print("^2[vein-clothing] Player ped is valid, proceeding with initialization.^7")
+            break
+        end
+        
+        Citizen.Wait(100)
+        pedWaitAttempts = pedWaitAttempts + 1
+        
+        if pedWaitAttempts % 10 == 0 then
+            print("^3[vein-clothing] Still waiting for valid player ped... Attempt " .. 
+                pedWaitAttempts .. "/100^7")
+        end
+    end
+    
+    if not validPed then
+        print("^1[WARNING] Failed to get valid player ped after 10 seconds. World initialization may have issues.^7")
     end
     
     -- Give the resource more time to fully initialize before loading stores
     Citizen.CreateThread(function()
         -- Add a longer delay to ensure all resources and functions are loaded
-        local initDelay = 5000 -- Increased from 3000 to 5000 ms
+        local initDelay = 8000 -- Increased from 5000 to 8000 ms
         print("^3[vein-clothing] Waiting " .. initDelay/1000 .. " seconds before loading world objects...^7")
         Citizen.Wait(initDelay)
         
-        -- Verify player ped again
+        -- Verify player ped again before loading components
         local playerPed = SafePlayerPedId()
-        if playerPed == 0 then
-            print("^1[ERROR] Player ped is still invalid after delay. World objects may not load correctly.^7")
+        if not playerPed or playerPed == 0 then
+            print("^1[ERROR] Player ped is still invalid after delay. Waiting for valid ped before proceeding.^7")
+            
+            -- One final attempt to get a valid ped with extended timeout
+            local emergencyAttempts = 0
+            while (not playerPed or playerPed == 0) and emergencyAttempts < 50 do
+                Citizen.Wait(100)
+                emergencyAttempts = emergencyAttempts + 1
+                playerPed = SafePlayerPedId()
+            end
+            
+            if not playerPed or playerPed == 0 then
+                print("^1[ERROR] Failed to get valid player ped after extended timeout. World objects may not load correctly.^7")
+            else
+                print("^2[vein-clothing] Valid player ped found after extended timeout. Proceeding.^7")
+            end
         end
         
         print("^2[vein-clothing] Initialization delay complete, setting up world objects now...^7")
@@ -1756,7 +1817,7 @@ function Initialize()
         end
         
         -- Delay outfit loading even more to ensure ped is fully loaded
-        Citizen.Wait(2000)
+        Citizen.Wait(3000)
         
         print("^3[vein-clothing] Loading player outfit...^7")
         local outfitLoaded = false
