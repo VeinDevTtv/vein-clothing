@@ -3,7 +3,7 @@ const app = new Vue({
     el: '#app',
     data: {
         visible: false,
-        debug: false,
+        debug: true,
         currentView: 'store',
         inStore: false,
         inLaundromat: false,
@@ -197,21 +197,62 @@ const app = new Vue({
         },
         
         filteredStoreItems() {
+            // Debug the items we're working with
+            console.log("Filtering store items:", 
+                "Total items:", this.storeItems.length, 
+                "Category:", this.selectedCategory,
+                "Subcategory:", this.selectedSubcategory, 
+                "Color:", this.selectedColor);
+            
+            if (this.debug) {
+                // Log some sample items to check their properties
+                const sampleItems = this.storeItems.slice(0, 3);
+                console.log("Sample items for debugging:", sampleItems);
+            }
+            
             let items = [...this.storeItems];
             
             // Apply category filter
             if (this.selectedCategory) {
-                items = items.filter(item => item.category === this.selectedCategory);
+                items = items.filter(item => {
+                    const match = String(item.category).toLowerCase() === String(this.selectedCategory).toLowerCase();
+                    return match;
+                });
+                console.log(`After category filter (${this.selectedCategory}):`, items.length);
             }
             
             // Apply subcategory filter
             if (this.selectedSubcategory && this.selectedCategory) {
-                items = items.filter(item => item.subcategory === this.selectedSubcategory);
+                items = items.filter(item => {
+                    // More flexible subcategory matching (case insensitive and fuzzy)
+                    const itemSubcat = String(item.subcategory || "").toLowerCase();
+                    const selectedSubcat = String(this.selectedSubcategory).toLowerCase();
+                    
+                    // Check for exact match or if item subcategory contains the selected value
+                    const match = itemSubcat === selectedSubcat || 
+                                  itemSubcat.includes(selectedSubcat) || 
+                                  selectedSubcat.includes(itemSubcat);
+                                  
+                    return match;
+                });
+                console.log(`After subcategory filter (${this.selectedSubcategory}):`, items.length);
             }
             
             // Apply color filter
             if (this.selectedColor) {
-                items = items.filter(item => item.color === this.selectedColor);
+                items = items.filter(item => {
+                    // More flexible color matching (case insensitive and fuzzy)
+                    const itemColor = String(item.color || "").toLowerCase();
+                    const selectedColor = String(this.selectedColor).toLowerCase();
+                    
+                    // Check for exact match or if item color contains the selected value
+                    const match = itemColor === selectedColor || 
+                                  itemColor.includes(selectedColor) || 
+                                  selectedColor.includes(itemColor);
+                                  
+                    return match;
+                });
+                console.log(`After color filter (${this.selectedColor}):`, items.length);
             }
             
             // Apply rarity filter
@@ -248,21 +289,62 @@ const app = new Vue({
             return items;
         },
         filteredWardrobeItems() {
+            // Debug the items we're working with
+            console.log("Filtering wardrobe items:", 
+                "Total items:", this.wardrobeItems.length, 
+                "Category:", this.selectedCategory,
+                "Subcategory:", this.selectedSubcategory, 
+                "Color:", this.selectedColor);
+            
+            if (this.debug) {
+                // Log some sample items to check their properties
+                const sampleItems = this.wardrobeItems.slice(0, 3);
+                console.log("Sample wardrobe items for debugging:", sampleItems);
+            }
+            
             let items = [...this.wardrobeItems];
             
             // Apply category filter
             if (this.selectedCategory) {
-                items = items.filter(item => item.category === this.selectedCategory);
+                items = items.filter(item => {
+                    const match = String(item.category).toLowerCase() === String(this.selectedCategory).toLowerCase();
+                    return match;
+                });
+                console.log(`After wardrobe category filter (${this.selectedCategory}):`, items.length);
             }
             
             // Apply subcategory filter
             if (this.selectedSubcategory && this.selectedCategory) {
-                items = items.filter(item => item.subcategory === this.selectedSubcategory);
+                items = items.filter(item => {
+                    // More flexible subcategory matching (case insensitive and fuzzy)
+                    const itemSubcat = String(item.subcategory || "").toLowerCase();
+                    const selectedSubcat = String(this.selectedSubcategory).toLowerCase();
+                    
+                    // Check for exact match or if item subcategory contains the selected value
+                    const match = itemSubcat === selectedSubcat || 
+                                  itemSubcat.includes(selectedSubcat) || 
+                                  selectedSubcat.includes(itemSubcat);
+                                  
+                    return match;
+                });
+                console.log(`After wardrobe subcategory filter (${this.selectedSubcategory}):`, items.length);
             }
             
             // Apply color filter
             if (this.selectedColor) {
-                items = items.filter(item => item.color === this.selectedColor);
+                items = items.filter(item => {
+                    // More flexible color matching (case insensitive and fuzzy)
+                    const itemColor = String(item.color || "").toLowerCase();
+                    const selectedColor = String(this.selectedColor).toLowerCase();
+                    
+                    // Check for exact match or if item color contains the selected value
+                    const match = itemColor === selectedColor || 
+                                  itemColor.includes(selectedColor) || 
+                                  selectedColor.includes(itemColor);
+                                  
+                    return match;
+                });
+                console.log(`After wardrobe color filter (${this.selectedColor}):`, items.length);
             }
             
             // Apply search filter
