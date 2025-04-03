@@ -66,8 +66,20 @@
                         <div class="store-info">
                             <h2>{{ currentStore.label }}</h2>
                             <div class="player-money">
-                                <i class="fas fa-money-bill"></i>
-                                <span>${{ playerMoney.toLocaleString() }}</span>
+                                <div class="money-container">
+                                    <div class="money-item" :class="{ 'active': paymentMethod === 'cash' }">
+                                        <i class="fas fa-money-bill"></i>
+                                        <span>${{ playerMoney.cash?.toLocaleString() }}</span>
+                                    </div>
+                                    <div class="money-item" :class="{ 'active': paymentMethod === 'bank' }">
+                                        <i class="fas fa-university"></i>
+                                        <span>${{ playerMoney.bank?.toLocaleString() }}</span>
+                                    </div>
+                                </div>
+                                <button class="payment-toggle" @click="togglePaymentMethod">
+                                    <i class="fas" :class="paymentMethod === 'cash' ? 'fa-money-bill' : 'fa-university'"></i>
+                                    Pay with: {{ paymentMethod }}
+                                </button>
                             </div>
                         </div>
                         
@@ -139,7 +151,7 @@
                                 <button class="btn try-on" @click="previewItem(item)">
                                     <i class="fas fa-eye"></i> {{ locales.ui.try_on }}
                                 </button>
-                                <button class="btn buy" @click="purchaseItem(item)" :disabled="item.stock <= 0 || playerMoney < item.price">
+                                <button class="btn buy" @click="purchaseItem(item)" :disabled="item.stock <= 0 || !canAfford(item.price)">
                                     <i class="fas fa-shopping-cart"></i> {{ locales.ui.buy }}
                                 </button>
                             </div>

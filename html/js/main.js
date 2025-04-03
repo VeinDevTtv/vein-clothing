@@ -9,7 +9,11 @@ const app = new Vue({
         inLaundromat: false,
         inTailor: false,
         currentStore: null,
-        playerMoney: 0,
+        playerMoney: {
+            cash: 0,
+            bank: 0
+        },
+        paymentMethod: 'cash', // Default payment method
         searchQuery: '',
         selectedCategory: null,
         selectedRarity: null,
@@ -361,7 +365,8 @@ const app = new Vue({
         purchaseItem(item) {
             this.postNUI('purchaseItem', {
                 itemName: item.name,
-                variation: this.selectedVariations[item.name] || 0
+                variation: this.selectedVariations[item.name] || 0,
+                paymentMethod: this.paymentMethod
             });
         },
         
@@ -571,6 +576,21 @@ const app = new Vue({
             this.closeModal();
         },
         
+        // Toggle payment method between cash and bank
+        togglePaymentMethod() {
+            this.paymentMethod = this.paymentMethod === 'cash' ? 'bank' : 'cash';
+            this.addNotification(`Payment method switched to ${this.paymentMethod}`, 'info');
+        },
+        
+        // Check if player can afford item with current payment method
+        canAfford(price) {
+            if (this.paymentMethod === 'cash') {
+                return this.playerMoney.cash >= price;
+            } else {
+                return this.playerMoney.bank >= price;
+            }
+        },
+        
         // Helper function to replace $.post
         postNUI(eventName, data) {
             try {
@@ -615,7 +635,17 @@ const app = new Vue({
                 this.inLaundromat = data.inLaundromat || false;
                 this.inTailor = data.inTailor || false;
                 this.currentStore = data.store || null;
-                this.playerMoney = data.money || 0;
+                
+                // Handle money - either as object or single value for backwards compatibility
+                if (typeof data.money === 'object') {
+                    this.playerMoney = data.money;
+                } else {
+                    this.playerMoney = {
+                        cash: data.money || 0,
+                        bank: 0
+                    };
+                }
+                
                 this.storeItems = data.storeItems || [];
                 this.wardrobeItems = data.wardrobeItems || [];
                 this.wishlistItems = data.wishlistItems || [];
@@ -668,7 +698,13 @@ const app = new Vue({
                 this.debug = data.debug || false;
                 console.log('UI initialized with debug mode:', this.debug);
             } else if (data.type === 'updateMoney') {
-                this.playerMoney = data.money;
+                // Update money amounts
+                if (typeof data.money === 'object') {
+                    this.playerMoney = data.money;
+                } else {
+                    this.playerMoney.cash = data.money || 0;
+                }
+                console.log('Money updated:', this.playerMoney);
             } else if (data.type === 'updateStoreItems') {
                 this.storeItems = data.items;
             } else if (data.type === 'updateWardrobeItems') {

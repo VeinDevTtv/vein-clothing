@@ -222,17 +222,50 @@ body {
 
 .player-money {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 10px;
-    font-size: 16px;
-    font-weight: 500;
-    background-color: var(--secondary-light);
-    padding: 10px 16px;
-    border-radius: var(--border-radius);
+    margin-top: 10px;
 }
 
-.player-money i {
-    color: var(--success);
+.money-container {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 8px;
+}
+
+.money-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    opacity: 0.7;
+    transition: all 0.2s ease;
+}
+
+.money-item.active {
+    opacity: 1;
+    background-color: rgba(0, 0, 0, 0.5);
+    box-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
+}
+
+.payment-toggle {
+    background-color: #2c3e50;
+    color: white;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.2s ease;
+}
+
+.payment-toggle:hover {
+    background-color: #3498db;
 }
 
 .category-filters h3, .rarity-filters h3, .sort-options h3, .price-range h3 {

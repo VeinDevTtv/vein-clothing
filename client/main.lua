@@ -1327,31 +1327,47 @@ end)
 
 -- Purchase clothing item
 RegisterNUICallback('purchaseItem', function(data, cb)
-    local itemName = data.item
-    local price = data.price
+    local itemName = data.itemName
     local variation = data.variation or 0
-    
-    QBCore.Functions.TriggerCallback('vein-clothing:server:purchaseItem', function(success, reason)
+    local paymentMethod = data.paymentMethod or "cash" -- Add payment method parameter
+
+    if not currentStore then
+        cb({
+            success = false,
+            message = "No active store"
+        })
+        return
+    end
+
+    if paymentMethod ~= "cash" and paymentMethod ~= "bank" then
+        print("^1[ERROR] Invalid payment method: " .. tostring(paymentMethod) .. ", defaulting to cash^7")
+        paymentMethod = "cash"
+    end
+
+    QBCore.Functions.TriggerCallback('vein-clothing:server:purchaseItem', function(success, message)
         if success then
-            QBCore.Functions.Notify("Purchased " .. QBCore.Shared.Items[itemName].label, "success")
+            QBCore.Functions.Notify("Purchased " .. itemName .. " using " .. paymentMethod, "success")
             
-            -- Update the item in current outfit
-            local item = QBCore.Shared.Items[itemName]
-            if item and item.client and item.client.component then
-                local component = item.client.component
-                currentOutfit[component] = {
-                    name = itemName,
-                    drawable = item.client.drawable,
-                    texture = variation == 0 and item.client.texture or item.client.variations[variation + 1].texture,
-                    variation = variation
-                }
+            -- Update money display in UI
+            local playerData = QBCore.Functions.GetPlayerData()
+            if playerData and playerData.money then
+                SendNUIMessage({
+                    type = "updateMoney",
+                    money = {
+                        cash = playerData.money.cash,
+                        bank = playerData.money.bank
+                    }
+                })
             end
         else
-            QBCore.Functions.Notify(reason, "error")
+            QBCore.Functions.Notify(message, "error")
         end
-        
-        cb({success = success})
-    end, itemName, price, variation, currentStore)
+
+        cb({
+            success = success,
+            message = message
+        })
+    end, itemName, 0, variation, currentStore, paymentMethod)
 end)
 
 -- Update wishlist

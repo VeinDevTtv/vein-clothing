@@ -229,21 +229,57 @@ function RegisterCallbacks()
                 if not item.client then
                     print("^3[DEBUG-SERVER] Item " .. itemName .. " has no client data, creating default^7")
                     local categoryMap = {
+                        -- Improved category mapping with more specific patterns
+                        ["shoe"] = "shoes",
+                        ["boot"] = "shoes", 
+                        ["sneaker"] = "shoes",
+                        ["heel"] = "shoes",
+                        ["loafer"] = "shoes",
+                        ["sandal"] = "shoes",
+                        ["slipper"] = "shoes",
                         ["suit"] = "shirts",
-                        ["dress"] = "shirts",
-                        ["shoes"] = "shoes",
-                        ["watch"] = "accessories",
-                        ["glasses"] = "glasses",
+                        ["shirt"] = "shirts",
+                        ["tshirt"] = "shirts",
+                        ["tee"] = "shirts",
+                        ["top"] = "shirts",
+                        ["jacket"] = "jackets",
+                        ["coat"] = "jackets",
+                        ["hoodie"] = "jackets",
+                        ["sweater"] = "jackets",
+                        ["pant"] = "pants",
+                        ["jean"] = "pants",
+                        ["trouser"] = "pants",
+                        ["short"] = "pants",
+                        ["skirt"] = "pants",
                         ["hat"] = "hats",
+                        ["cap"] = "hats",
+                        ["beanie"] = "hats",
+                        ["helmet"] = "hats",
                         ["mask"] = "masks",
-                        ["pants"] = "pants"
+                        ["glass"] = "glasses",
+                        ["watch"] = "accessories",
+                        ["jewel"] = "accessories",
+                        ["necklace"] = "accessories",
+                        ["ring"] = "accessories",
+                        ["bracelet"] = "accessories",
+                        ["earring"] = "accessories",
+                        ["belt"] = "accessories",
+                        ["tie"] = "accessories",
+                        ["scarf"] = "accessories",
+                        ["glove"] = "accessories",
+                        ["bag"] = "bags",
+                        ["backpack"] = "bags",
+                        ["purse"] = "bags"
                     }
                     
-                    -- Determine category based on item name
+                    -- Determine category based on item name with improved matching
                     local category = "shirts" -- Default category
+                    local itemNameLower = string.lower(itemName)
+                    
                     for keyword, cat in pairs(categoryMap) do
-                        if string.find(string.lower(itemName), keyword) then
+                        if string.find(itemNameLower, keyword) then
                             category = cat
+                            print("^3[DEBUG-SERVER] Matched keyword '" .. keyword .. "' for item '" .. itemName .. "', setting category: " .. cat .. "^7")
                             break
                         end
                     end
@@ -363,8 +399,18 @@ function RegisterCallbacks()
     end)
     
     -- Purchase item callback
-    QBCore.Functions.CreateCallback('vein-clothing:server:purchaseItem', function(source, cb, itemName, price, variation, storeType)
-        local success, message = PurchaseItem(source, itemName, storeType)
+    QBCore.Functions.CreateCallback('vein-clothing:server:purchaseItem', function(source, cb, itemName, price, variation, storeType, paymentMethod)
+        -- Add payment method support (cash or bank)
+        local paymentSource = paymentMethod or "cash" -- Default to cash if not specified
+        
+        if paymentSource ~= "cash" and paymentSource ~= "bank" then
+            print("^1[ERROR-SERVER] Invalid payment method: " .. tostring(paymentMethod) .. ", defaulting to cash^7")
+            paymentSource = "cash"
+        end
+        
+        print("^2[DEBUG-SERVER] Purchase attempt for " .. itemName .. " using payment method: " .. paymentSource .. "^7")
+        
+        local success, message = PurchaseItem(source, itemName, storeType, paymentSource)
         cb(success, message)
     end)
     
@@ -771,7 +817,7 @@ end
 Initialize()
 
 -- Player purchased an item
-function PurchaseItem(source, itemName, storeType)
+function PurchaseItem(source, itemName, storeType, paymentMethod)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     
@@ -779,73 +825,85 @@ function PurchaseItem(source, itemName, storeType)
         return false, "Player not found"
     end
     
-    if not StoreStock[storeType] or not StoreStock[storeType][itemName] then
-        return false, "Item not available in this store"
-    end
-    
-    -- Check if item is in stock
-    if StoreStock[storeType][itemName].stock <= 0 then
-        return false, "Item out of stock"
-    end
-    
-    -- Calculate price
     local item = QBCore.Shared.Items[itemName]
+    
     if not item then
         return false, "Item not found"
     end
     
-    local stockData = StoreStock[storeType][itemName]
-    local rarityMultiplier = Config.Rarity[stockData.rarity].priceMultiplier or 1.0
-    local storeMultiplier = Config.Stores[storeType].priceMultiplier or 1.0
-    local price = math.floor((item.price or 100) * rarityMultiplier * storeMultiplier)
+    -- Calculate price
+    local basePrice = item.price or 100
+    local rarity = (item.client and item.client.rarity) or "common"
     
-    -- Check if player has enough money
-    local playerMoney = Player.PlayerData.money.cash
-    if playerMoney < price then
-        return false, "Not enough money"
+    -- Ensure Config.Rarity exists and has valid entries
+    if not Config.Rarity or not Config.Rarity[rarity] or not Config.Rarity[rarity].priceMultiplier then
+        print("^1[ERROR-SERVER] Missing rarity config for " .. rarity .. ", using default multiplier^7")
+        Config.Rarity = Config.Rarity or {}
+        Config.Rarity[rarity] = Config.Rarity[rarity] or { priceMultiplier = 1.0 }
     end
     
-    -- Remove money
-    if not Player.Functions.RemoveMoney('cash', price) then
-        return false, "Failed to remove money"
+    local rarityMultiplier = Config.Rarity[rarity].priceMultiplier or 1.0
+    local storeMultiplier = 1.0
+    
+    -- Apply store multiplier if available
+    if storeType and Config.Stores and Config.Stores[storeType] and Config.Stores[storeType].priceMultiplier then
+        storeMultiplier = Config.Stores[storeType].priceMultiplier
     end
     
-    -- Add item to player inventory with metadata
-    local metadata = {
-        condition = 100,
-        lastWorn = 0,
-        dirty = false,
-        variation = 0
-    }
+    local price = math.floor(basePrice * rarityMultiplier * storeMultiplier)
     
-    local success = Player.Functions.AddItem(itemName, 1, nil, metadata)
-    
-    if not success then
-        -- Refund money if item couldn't be added
-        Player.Functions.AddMoney('cash', price)
-        return false, "Inventory full"
-    end
-    
-    -- Reduce stock
-    StoreStock[storeType][itemName].stock = StoreStock[storeType][itemName].stock - 1
-    
-    -- Check if store needs restock
-    local needsRestock = true
-    for _, stockData in pairs(StoreStock[storeType]) do
-        if stockData.stock > 0 then
-            needsRestock = false
-            break
+    -- Check stock
+    local hasStock = true
+    if StoreStock[storeType] and StoreStock[storeType][itemName] then
+        if StoreStock[storeType][itemName].stock <= 0 then
+            hasStock = false
         end
     end
     
-    if needsRestock then
-        NeedsRestock[storeType] = true
+    if not hasStock then
+        return false, "Item out of stock"
     end
     
-    -- Notify player
-    TriggerClientEvent('vein-clothing:client:itemPurchased', src, itemName, Config.Stores[storeType].label)
+    -- Modified to support payment method
+    local paymentSource = paymentMethod or "cash" -- Default to cash
+    local moneyType = paymentSource == "bank" and "bank" or "cash"
     
-    return true, "Purchase successful"
+    -- Check if player has enough money
+    if Player.PlayerData.money[moneyType] < price then
+        return false, "Not enough " .. moneyType
+    end
+    
+    -- Remove money from player
+    Player.Functions.RemoveMoney(moneyType, price)
+    
+    -- Add item to player inventory with variation data
+    local info = {
+        variation = 0, -- Default variation
+        condition = 100, -- Perfect condition
+        dirty = false, -- Not dirty
+        purchased = true -- Indicates item was purchased (not found/crafted)
+    }
+    
+    local added = Player.Functions.AddItem(itemName, 1, nil, info)
+    
+    if not added then
+        -- Refund the player if the item couldn't be added
+        Player.Functions.AddMoney(moneyType, price)
+        return false, "Inventory full"
+    end
+    
+    -- Update stock
+    if StoreStock[storeType] and StoreStock[storeType][itemName] then
+        StoreStock[storeType][itemName].stock = StoreStock[storeType][itemName].stock - 1
+    end
+    
+    -- Log the transaction
+    print("^2[vein-clothing] Player " .. Player.PlayerData.citizenid .. " purchased " .. itemName .. " for $" .. price .. " using " .. moneyType .. "^7")
+    
+    -- Refresh player inventory
+    TriggerClientEvent('inventory:client:ItemBox', source, QBCore.Shared.Items[itemName], "add")
+    
+    return true, "Item purchased"
 end
 
 -- Expose functions for export
