@@ -83,23 +83,6 @@ function SetupDatabase()
     print("^2[vein-clothing] Database tables setup complete^7")
 end
 
--- Initialize function (called on script start)
-function Initialize()
-    -- Set up the database tables first
-    SetupDatabase()
-    
-    -- Initialize store stock from database
-    LoadStoreStockFromDatabase()
-    
-    -- Start periodic functions
-    StartPeriodicFunctions()
-    
-    -- Register callbacks
-    RegisterCallbacks()
-    
-    print("^2[vein-clothing] Initialization completed successfully^7")
-end
-
 -- Initialize store stock from config
 function InitializeStoreStock()
     for storeType, storeData in pairs(Config.Stores) do
@@ -134,6 +117,121 @@ function InitializeStoreStock()
         
         NeedsRestock[storeType] = false
     end
+end
+
+-- Function to load store stock from database
+function LoadStoreStockFromDatabase()
+    MySQL.Async.fetchAll('SELECT * FROM store_inventory', {}, function(results)
+        if results and #results > 0 then
+            -- Initialize empty store stock if needed
+            for storeType, _ in pairs(Config.Stores) do
+                if not StoreStock[storeType] then
+                    StoreStock[storeType] = {}
+                end
+            end
+            
+            -- Load data from database
+            for _, row in ipairs(results) do
+                local storeType = row.store
+                local itemName = row.item
+                
+                -- Make sure the store type exists in our config
+                if Config.Stores[storeType] then
+                    -- Make sure the item exists in shared items
+                    if QBCore.Shared.Items[itemName] then
+                        -- Get rarity
+                        local rarity = "common"
+                        if QBCore.Shared.Items[itemName].client then
+                            rarity = QBCore.Shared.Items[itemName].client.rarity or "common"
+                        end
+                        
+                        -- Get max stock
+                        local maxStock = 10
+                        if Config.Rarity and Config.Rarity[rarity] then
+                            maxStock = Config.Rarity[rarity].maxStock or 10
+                        end
+                        
+                        -- Parse timestamp or use current time
+                        local lastRestock = os.time()
+                        if row.last_restock then
+                            lastRestock = os.time() -- Default fallback
+                            
+                            -- Try to parse the timestamp string
+                            local pattern = "(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)"
+                            local year, month, day, hour, min, sec = row.last_restock:match(pattern)
+                            if year then
+                                lastRestock = os.time({
+                                    year = tonumber(year),
+                                    month = tonumber(month),
+                                    day = tonumber(day),
+                                    hour = tonumber(hour),
+                                    min = tonumber(min),
+                                    sec = tonumber(sec)
+                                })
+                            end
+                        end
+                        
+                        -- Store the data
+                        StoreStock[storeType][itemName] = {
+                            stock = tonumber(row.stock),
+                            maxStock = maxStock,
+                            rarity = rarity,
+                            lastRestock = lastRestock
+                        }
+                    end
+                end
+            end
+            
+            if Config.Debug then
+                print("^2[INFO] Store stock loaded from database^7")
+            end
+        else
+            -- No data in database, initialize from config
+            print("^3[WARNING] No store stock found in database, initializing from config^7")
+            InitializeStoreStock()
+        end
+    end)
+end
+
+-- Function to save store stock to database
+function SaveStoreStockToDatabase()
+    if not StoreStock then return end
+    
+    -- First clean up old data
+    MySQL.Async.execute('DELETE FROM store_inventory', {}, function()
+        -- Now insert fresh data
+        for storeType, items in pairs(StoreStock) do
+            for itemName, stockData in pairs(items) do
+                MySQL.Async.execute('INSERT INTO store_inventory (store, item, stock, last_restock) VALUES (?, ?, ?, ?)', {
+                    storeType,
+                    itemName,
+                    stockData.stock,
+                    os.date('%Y-%m-%d %H:%M:%S', stockData.lastRestock or os.time())
+                })
+            end
+        end
+        
+        if Config.Debug then
+            print("^2[INFO] Store stock saved to database^7")
+        end
+    end)
+end
+
+-- Initialize function (called on script start)
+function Initialize()
+    -- Set up the database tables first
+    SetupDatabase()
+    
+    -- Initialize store stock from database
+    LoadStoreStockFromDatabase()
+    
+    -- Start periodic functions
+    StartPeriodicFunctions()
+    
+    -- Register callbacks
+    RegisterCallbacks()
+    
+    print("^2[vein-clothing] Initialization completed successfully^7")
 end
 
 -- Start periodic functions
@@ -879,9 +977,6 @@ function UpdateClothingCondition()
     end
 end
 
--- Initialize on resource start
-Initialize()
-
 -- Player purchased an item
 function PurchaseItem(source, itemName, storeType, paymentMethod)
     local src = source
@@ -1223,102 +1318,4 @@ end)
 CreateThread(function()
     Wait(2000) -- Wait for everything to load
     Initialize()
-end)
-
--- Function to save store stock to database
-function SaveStoreStockToDatabase()
-    if not StoreStock then return end
-    
-    -- First clean up old data
-    MySQL.Async.execute('DELETE FROM store_inventory', {}, function()
-        -- Now insert fresh data
-        for storeType, items in pairs(StoreStock) do
-            for itemName, stockData in pairs(items) do
-                MySQL.Async.execute('INSERT INTO store_inventory (store, item, stock, last_restock) VALUES (?, ?, ?, ?)', {
-                    storeType,
-                    itemName,
-                    stockData.stock,
-                    os.date('%Y-%m-%d %H:%M:%S', stockData.lastRestock or os.time())
-                })
-            end
-        end
-        
-        if Config.Debug then
-            print("^2[INFO] Store stock saved to database^7")
-        end
-    end)
-end
-
--- Function to load store stock from database
-function LoadStoreStockFromDatabase()
-    MySQL.Async.fetchAll('SELECT * FROM store_inventory', {}, function(results)
-        if results and #results > 0 then
-            -- Initialize empty store stock if needed
-            for storeType, _ in pairs(Config.Stores) do
-                if not StoreStock[storeType] then
-                    StoreStock[storeType] = {}
-                end
-            end
-            
-            -- Load data from database
-            for _, row in ipairs(results) do
-                local storeType = row.store
-                local itemName = row.item
-                
-                -- Make sure the store type exists in our config
-                if Config.Stores[storeType] then
-                    -- Make sure the item exists in shared items
-                    if QBCore.Shared.Items[itemName] then
-                        -- Get rarity
-                        local rarity = "common"
-                        if QBCore.Shared.Items[itemName].client then
-                            rarity = QBCore.Shared.Items[itemName].client.rarity or "common"
-                        end
-                        
-                        -- Get max stock
-                        local maxStock = 10
-                        if Config.Rarity and Config.Rarity[rarity] then
-                            maxStock = Config.Rarity[rarity].maxStock or 10
-                        end
-                        
-                        -- Parse timestamp or use current time
-                        local lastRestock = os.time()
-                        if row.last_restock then
-                            lastRestock = os.time() -- Default fallback
-                            
-                            -- Try to parse the timestamp string
-                            local pattern = "(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)"
-                            local year, month, day, hour, min, sec = row.last_restock:match(pattern)
-                            if year then
-                                lastRestock = os.time({
-                                    year = tonumber(year),
-                                    month = tonumber(month),
-                                    day = tonumber(day),
-                                    hour = tonumber(hour),
-                                    min = tonumber(min),
-                                    sec = tonumber(sec)
-                                })
-                            end
-                        end
-                        
-                        -- Store the data
-                        StoreStock[storeType][itemName] = {
-                            stock = tonumber(row.stock),
-                            maxStock = maxStock,
-                            rarity = rarity,
-                            lastRestock = lastRestock
-                        }
-                    end
-                end
-            end
-            
-            if Config.Debug then
-                print("^2[INFO] Store stock loaded from database^7")
-            end
-        else
-            -- No data in database, initialize from config
-            print("^3[WARNING] No store stock found in database, initializing from config^7")
-            InitializeStoreStock()
-        end
-    end)
-end 
+end) 
