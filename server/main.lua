@@ -2055,7 +2055,6 @@ function AddVanillaClothes()
     
     -- Now manually populate the store inventories
     print("^3[INFO] Now populating store inventories with vanilla clothing...^7")
-    local addedItems = 0
     
     -- Define which items go in which stores
     local storeInventories = {
@@ -2097,6 +2096,56 @@ function AddVanillaClothes()
             if not QBCore.Shared.Items[itemName] then
                 print("^1[ERROR] Item " .. itemName .. " not found in QBCore.Shared.Items^7")
                 goto continue_item_male
+            end
+            
+            -- Ensure item has proper client data with component, drawable, texture
+            if not QBCore.Shared.Items[itemName].client then
+                QBCore.Shared.Items[itemName].client = {}
+                print("^3[DEBUG-ITEMS] Adding missing client object to item: " .. itemName .. "^7")
+            end
+            
+            -- Add default component based on category if missing
+            if not QBCore.Shared.Items[itemName].client.component then
+                -- Determine category from name if not set
+                local category = "shirts"
+                local itemNameLower = string.lower(itemName)
+                
+                if string.find(itemNameLower, "pant") or string.find(itemNameLower, "jean") or string.find(itemNameLower, "trouser") then
+                    category = "pants"
+                    QBCore.Shared.Items[itemName].client.component = 4 -- Legs
+                elseif string.find(itemNameLower, "shoe") or string.find(itemNameLower, "boot") or string.find(itemNameLower, "sneaker") then
+                    category = "shoes"
+                    QBCore.Shared.Items[itemName].client.component = 6 -- Feet
+                elseif string.find(itemNameLower, "hat") or string.find(itemNameLower, "cap") or string.find(itemNameLower, "helmet") then
+                    category = "hats"
+                    QBCore.Shared.Items[itemName].client.component = 0 -- Head props
+                elseif string.find(itemNameLower, "glass") or string.find(itemNameLower, "sunglass") then
+                    category = "glasses"
+                    QBCore.Shared.Items[itemName].client.component = 1 -- Eye props
+                elseif string.find(itemNameLower, "watch") then
+                    category = "accessories"
+                    QBCore.Shared.Items[itemName].client.component = 6 -- Wrist
+                elseif string.find(itemNameLower, "necklace") or string.find(itemNameLower, "chain") then
+                    category = "accessories"
+                    QBCore.Shared.Items[itemName].client.component = 7 -- Neck
+                else
+                    -- Default to torso
+                    QBCore.Shared.Items[itemName].client.component = 11 -- Torso
+                end
+                
+                QBCore.Shared.Items[itemName].client.category = QBCore.Shared.Items[itemName].client.category or category
+                print("^3[DEBUG-ITEMS] Added component " .. QBCore.Shared.Items[itemName].client.component .. " to item: " .. itemName .. "^7")
+            end
+            
+            -- Add default drawable/texture if missing
+            if not QBCore.Shared.Items[itemName].client.drawable then
+                QBCore.Shared.Items[itemName].client.drawable = 0
+                print("^3[DEBUG-ITEMS] Added default drawable 0 to item: " .. itemName .. "^7")
+            end
+            
+            if not QBCore.Shared.Items[itemName].client.texture then
+                QBCore.Shared.Items[itemName].client.texture = 0
+                print("^3[DEBUG-ITEMS] Added default texture 0 to item: " .. itemName .. "^7")
             end
             
             -- Create stock data
@@ -2159,9 +2208,8 @@ function AddVanillaClothes()
             ::continue_item_male::
         end
         
-        -- Process female items (similar to male items)
+        -- Process female items
         for _, itemName in ipairs(genderItems.female) do
-            -- Make sure the item exists in QBCore.Shared.Items
             if not QBCore.Shared.Items[itemName] then
                 print("^1[ERROR] Item " .. itemName .. " not found in QBCore.Shared.Items^7")
                 goto continue_item_female
@@ -2283,7 +2331,7 @@ function AddVanillaClothes()
         ::continue_store::
     end
     
-    print("^2[SUCCESS] Added/Updated " .. addedItems .. " vanilla clothing items to stores^7")
+    print("^2[SUCCESS] Added/Updated " .. tostring(addedItems) .. " vanilla clothing items to stores^7")
     print("^2[vein-clothing] Vanilla clothes population completed!^7")
     
     -- Register items as usable again
