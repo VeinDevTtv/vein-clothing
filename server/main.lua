@@ -1583,4 +1583,542 @@ Citizen.CreateThread(function()
     end
     
     print("^2[vein-clothing] Successfully registered " .. registeredCount .. " vanilla clothing items^7")
-end) 
+    
+    -- Add vanilla clothing to store inventory database after a brief delay
+    Citizen.Wait(3000)
+    PopulateStoreInventories()
+end)
+
+-- Function to populate store inventories with vanilla clothing
+function PopulateStoreInventories()
+    print("^2[vein-clothing] Populating store inventories with vanilla clothing...^7")
+    
+    -- Define which items go in which stores
+    local storeInventories = {
+        ['suburban'] = {
+            -- Male items (corrected to match the vanilla_clothes.lua file)
+            male = {"white_tshirt", "black_tshirt", "red_tshirt", "hoodie_black", "hoodie_gray", 
+                "jeans_blue", "jeans_black", "sneakers_white", "sneakers_black", "cap_black", "cap_blue"},
+            -- Female items (corrected to match the vanilla_clothes.lua file)
+            female = {"white_tanktop", "black_tanktop", "tshirt_white_f", "tshirt_black_f", 
+                "jeans_blue_f", "jeans_black_f", "shorts_f", "sneakers_white_f", "cap_pink"}
+        },
+        ['ponsonbys'] = {
+            -- Male items (corrected to match the vanilla_clothes.lua file)
+            male = {"suit_black", "suit_blue", "suit_pants_black", "suit_pants_blue", 
+                "dress_shoes_black", "dress_shoes_brown", "watch_classic", "sunglasses_black"},
+            -- Female items (corrected to match the vanilla_clothes.lua file)
+            female = {"suit_jacket_f", "suit_pants_f", "heels_black", "blouse_white", 
+                "necklace_pearl", "watch_gold_f", "sunglasses_cat"}
+        }
+    }
+    
+    -- Check each store type in the store inventory
+    for storeType, genderItems in pairs(storeInventories) do
+        -- Make sure the store exists in Config.Stores
+        if not Config.Stores[storeType] then
+            print("^3[WARNING] Store type " .. storeType .. " not found in Config.Stores, skipping^7")
+            goto continue_store
+        end
+        
+        -- Process male items for this store
+        for _, itemName in ipairs(genderItems.male) do
+            -- Make sure the item exists in QBCore.Shared.Items
+            if not QBCore.Shared.Items[itemName] then
+                print("^3[WARNING] Item " .. itemName .. " not found in QBCore.Shared.Items, skipping^7")
+                goto continue_item_male
+            end
+            
+            -- Create default stock values
+            local rarity = QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.rarity or "common"
+            local maxStock = (Config.Rarity[rarity] and Config.Rarity[rarity].maxStock) or 10
+            local stock = math.random(1, maxStock)
+            
+            -- Initialize StoreStock if needed
+            if not StoreStock[storeType] then
+                StoreStock[storeType] = {}
+            end
+            
+            -- Add to StoreStock
+            StoreStock[storeType][itemName] = {
+                stock = stock, 
+                maxStock = maxStock,
+                rarity = rarity,
+                lastRestock = os.time()
+            }
+            
+            -- Check if item exists in database
+            MySQL.Async.fetchScalar('SELECT COUNT(*) FROM store_inventory WHERE store = ? AND item = ?', {
+                storeType,
+                itemName
+            }, function(count)
+                if count > 0 then
+                    -- Update existing record
+                    MySQL.Async.execute('UPDATE store_inventory SET stock = ?, last_restock = ? WHERE store = ? AND item = ?', {
+                        stock,
+                        os.date('%Y-%m-%d %H:%M:%S', os.time()),
+                        storeType,
+                        itemName
+                    })
+                else
+                    -- Insert new record
+                    MySQL.Async.execute('INSERT INTO store_inventory (store, item, stock, last_restock) VALUES (?, ?, ?, ?)', {
+                        storeType,
+                        itemName,
+                        stock,
+                        os.date('%Y-%m-%d %H:%M:%S', os.time())
+                    })
+                end
+            end)
+            
+            -- Add to store config inventory array if not already there
+            local found = false
+            for _, item in ipairs(Config.Stores[storeType].inventory) do
+                if item == itemName then
+                    found = true
+                    break
+                end
+            end
+            
+            if not found then
+                table.insert(Config.Stores[storeType].inventory, itemName)
+            end
+            
+            ::continue_item_male::
+        end
+        
+        -- Process female items for this store
+        for _, itemName in ipairs(genderItems.female) do
+            -- Make sure the item exists in QBCore.Shared.Items
+            if not QBCore.Shared.Items[itemName] then
+                print("^3[WARNING] Item " .. itemName .. " not found in QBCore.Shared.Items, skipping^7")
+                goto continue_item_female
+            end
+            
+            -- Create default stock values
+            local rarity = QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.rarity or "common"
+            local maxStock = (Config.Rarity[rarity] and Config.Rarity[rarity].maxStock) or 10
+            local stock = math.random(1, maxStock)
+            
+            -- Initialize StoreStock if needed
+            if not StoreStock[storeType] then
+                StoreStock[storeType] = {}
+            end
+            
+            -- Add to StoreStock
+            StoreStock[storeType][itemName] = {
+                stock = stock, 
+                maxStock = maxStock,
+                rarity = rarity,
+                lastRestock = os.time()
+            }
+            
+            -- Check if item exists in database
+            MySQL.Async.fetchScalar('SELECT COUNT(*) FROM store_inventory WHERE store = ? AND item = ?', {
+                storeType,
+                itemName
+            }, function(count)
+                if count > 0 then
+                    -- Update existing record
+                    MySQL.Async.execute('UPDATE store_inventory SET stock = ?, last_restock = ? WHERE store = ? AND item = ?', {
+                        stock,
+                        os.date('%Y-%m-%d %H:%M:%S', os.time()),
+                        storeType,
+                        itemName
+                    })
+                else
+                    -- Insert new record
+                    MySQL.Async.execute('INSERT INTO store_inventory (store, item, stock, last_restock) VALUES (?, ?, ?, ?)', {
+                        storeType,
+                        itemName,
+                        stock,
+                        os.date('%Y-%m-%d %H:%M:%S', os.time())
+                    })
+                end
+            end)
+            
+            -- Add to store config inventory array if not already there
+            local found = false
+            for _, item in ipairs(Config.Stores[storeType].inventory) do
+                if item == itemName then
+                    found = true
+                    break
+                end
+            end
+            
+            if not found then
+                table.insert(Config.Stores[storeType].inventory, itemName)
+            end
+            
+            ::continue_item_female::
+        end
+        
+        ::continue_store::
+    end
+    
+    print("^2[vein-clothing] Successfully populated store inventories with vanilla clothing^7")
+end
+
+-- Function to manually refresh store inventory
+function RefreshStoreInventories()
+    print("^2[vein-clothing] Manually refreshing store inventories...^7")
+    PopulateStoreInventories()
+end
+
+-- Register command to refresh store inventories
+RegisterCommand("refreshclothingstores", function(source, args)
+    -- Only allow server console or admins to use this command
+    if source == 0 then
+        RefreshStoreInventories()
+    else
+        local Player = QBCore.Functions.GetPlayer(source)
+        if Player and Player.PlayerData.group == "admin" then
+            RefreshStoreInventories()
+            TriggerClientEvent('QBCore:Notify', source, "Store inventories refreshed", "success")
+        else
+            TriggerClientEvent('QBCore:Notify', source, "You don't have permission to use this command", "error")
+        end
+    end
+end, true)
+
+-- Register command to manually trigger vanilla clothing population
+RegisterCommand("addvanillaclothes", function(source)
+    local src = source
+    
+    -- Only allow server console or admins to use this command
+    if src == 0 then -- Called from server console
+        AddVanillaClothes()
+    else -- Called by a player
+        local Player = QBCore.Functions.GetPlayer(src)
+        if Player and Player.PlayerData.group == "admin" then
+            AddVanillaClothes()
+            TriggerClientEvent('QBCore:Notify', src, "Added vanilla clothes to database", "success")
+        else
+            TriggerClientEvent('QBCore:Notify', src, "You don't have permission to use this command", "error")
+        end
+    end
+end, true) -- Restricted command
+
+-- Function to add vanilla clothes and force database updates
+function AddVanillaClothes()
+    print("^2[vein-clothing] Starting vanilla clothes population...^7")
+    
+    -- First, register items in QBCore.Shared.Items if not already there
+    local registeredCount = 0
+    
+    -- Helper function to register a clothing item
+    local function RegisterClothingItem(name, data)
+        -- Skip if item already exists
+        if QBCore.Shared.Items[name] then
+            print("^3[INFO] Item " .. name .. " already exists in QBCore.Shared.Items^7")
+            return false
+        end
+        
+        -- Create the item data
+        QBCore.Shared.Items[name] = {
+            name = name,
+            label = data.label,
+            weight = 250,
+            type = 'item',
+            image = name .. '.png', -- You may need to add these images
+            unique = true,
+            useable = true,
+            shouldClose = true,
+            combinable = nil,
+            description = data.description or "A clothing item",
+            price = data.price or 100,
+            client = {
+                category = data.category,
+                component = data.component,
+                drawable = data.drawable,
+                texture = data.texture,
+                rarity = data.rarity or "common",
+                gender = (name:find("_f") and "female") or "male",
+                event = data.type == "prop" and "vein-clothing:client:wearProp" or "vein-clothing:client:wearItem"
+            }
+        }
+        
+        print("^2[SUCCESS] Registered item " .. name .. " in QBCore.Shared.Items^7")
+        return true
+    end
+    
+    -- Make sure Config.VanillaClothes exists
+    if not Config.VanillaClothes then
+        print("^1[ERROR] Config.VanillaClothes is missing!^7")
+        return
+    end
+    
+    -- Register male clothing
+    print("^3[INFO] Registering male clothing items...^7")
+    for category, items in pairs(Config.VanillaClothes.male) do
+        for _, item in ipairs(items) do
+            if RegisterClothingItem(item.name, item) then
+                registeredCount = registeredCount + 1
+            end
+        end
+    end
+    
+    -- Register female clothing
+    print("^3[INFO] Registering female clothing items...^7")
+    for category, items in pairs(Config.VanillaClothes.female) do
+        for _, item in ipairs(items) do
+            if RegisterClothingItem(item.name, item) then
+                registeredCount = registeredCount + 1
+            end
+        end
+    end
+    
+    print("^2[SUCCESS] Registered " .. registeredCount .. " vanilla clothing items^7")
+    
+    -- Now manually populate the store inventories
+    print("^3[INFO] Now populating store inventories with vanilla clothing...^7")
+    local addedItems = 0
+    
+    -- Define which items go in which stores
+    local storeInventories = {
+        ['suburban'] = {
+            -- Male items
+            male = {"white_tshirt", "black_tshirt", "red_tshirt", "hoodie_black", "hoodie_gray", 
+                "jeans_blue", "jeans_black", "sneakers_white", "sneakers_black", "cap_black", "cap_blue"},
+            -- Female items
+            female = {"white_tanktop", "black_tanktop", "tshirt_white_f", "tshirt_black_f", 
+                "jeans_blue_f", "jeans_black_f", "shorts_f", "sneakers_white_f", "cap_pink"}
+        },
+        ['ponsonbys'] = {
+            -- Male items
+            male = {"suit_black", "suit_blue", "suit_pants_black", "suit_pants_blue", 
+                "dress_shoes_black", "dress_shoes_brown", "watch_classic", "sunglasses_black"},
+            -- Female items
+            female = {"suit_jacket_f", "suit_pants_f", "heels_black", "blouse_white", 
+                "necklace_pearl", "watch_gold_f", "sunglasses_cat"}
+        }
+    }
+    
+    -- Loop through each store
+    for storeType, genderItems in pairs(storeInventories) do
+        -- Make sure the store exists in Config.Stores
+        if not Config.Stores[storeType] then
+            print("^1[ERROR] Store " .. storeType .. " not found in Config.Stores^7")
+            goto continue_store
+        end
+        
+        print("^3[INFO] Adding items to store: " .. storeType .. "^7")
+        
+        -- Initialize StoreStock for this store if needed
+        if not StoreStock[storeType] then
+            StoreStock[storeType] = {}
+        end
+        
+        -- Process male items
+        for _, itemName in ipairs(genderItems.male) do
+            if not QBCore.Shared.Items[itemName] then
+                print("^1[ERROR] Item " .. itemName .. " not found in QBCore.Shared.Items^7")
+                goto continue_item_male
+            end
+            
+            -- Create stock data
+            local rarity = QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.rarity or "common"
+            local maxStock = (Config.Rarity[rarity] and Config.Rarity[rarity].maxStock) or 10
+            local stock = math.random(1, maxStock)
+            
+            -- Add to StoreStock
+            StoreStock[storeType][itemName] = {
+                stock = stock, 
+                maxStock = maxStock,
+                rarity = rarity,
+                lastRestock = os.time()
+            }
+            
+            -- Force insert into database
+            MySQL.Async.fetchScalar('SELECT COUNT(*) FROM store_inventory WHERE store = ? AND item = ?', {
+                storeType,
+                itemName
+            }, function(count)
+                if count and count > 0 then
+                    -- Update existing record
+                    MySQL.Async.execute('UPDATE store_inventory SET stock = ?, last_restock = ? WHERE store = ? AND item = ?', {
+                        stock,
+                        os.date('%Y-%m-%d %H:%M:%S', os.time()),
+                        storeType,
+                        itemName
+                    }, function(rowsAffected)
+                        print("^2[DATABASE] Updated item " .. itemName .. " for store " .. storeType .. " (Rows affected: " .. tostring(rowsAffected) .. ")^7")
+                    end)
+                else
+                    -- Insert new record
+                    MySQL.Async.execute('INSERT INTO store_inventory (store, item, stock, last_restock) VALUES (?, ?, ?, ?)', {
+                        storeType,
+                        itemName,
+                        stock,
+                        os.date('%Y-%m-%d %H:%M:%S', os.time())
+                    }, function(rowsAffected)
+                        print("^2[DATABASE] Inserted item " .. itemName .. " for store " .. storeType .. " (Rows affected: " .. tostring(rowsAffected) .. ")^7")
+                    end)
+                end
+            end)
+            
+            -- Add to store config inventory
+            local found = false
+            for _, item in ipairs(Config.Stores[storeType].inventory) do
+                if item == itemName then
+                    found = true
+                    break
+                end
+            end
+            
+            if not found then
+                table.insert(Config.Stores[storeType].inventory, itemName)
+            end
+            
+            addedItems = addedItems + 1
+            print("^2[SUCCESS] Added " .. itemName .. " to " .. storeType .. " (Stock: " .. stock .. ")^7")
+            
+            ::continue_item_male::
+        end
+        
+        -- Process female items (similar to male items)
+        for _, itemName in ipairs(genderItems.female) do
+            if not QBCore.Shared.Items[itemName] then
+                print("^1[ERROR] Item " .. itemName .. " not found in QBCore.Shared.Items^7")
+                goto continue_item_female
+            end
+            
+            -- Create stock data
+            local rarity = QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.rarity or "common"
+            local maxStock = (Config.Rarity[rarity] and Config.Rarity[rarity].maxStock) or 10
+            local stock = math.random(1, maxStock)
+            
+            -- Add to StoreStock
+            StoreStock[storeType][itemName] = {
+                stock = stock, 
+                maxStock = maxStock,
+                rarity = rarity,
+                lastRestock = os.time()
+            }
+            
+            -- Force insert into database
+            MySQL.Async.fetchScalar('SELECT COUNT(*) FROM store_inventory WHERE store = ? AND item = ?', {
+                storeType,
+                itemName
+            }, function(count)
+                if count and count > 0 then
+                    -- Update existing record
+                    MySQL.Async.execute('UPDATE store_inventory SET stock = ?, last_restock = ? WHERE store = ? AND item = ?', {
+                        stock,
+                        os.date('%Y-%m-%d %H:%M:%S', os.time()),
+                        storeType,
+                        itemName
+                    }, function(rowsAffected)
+                        print("^2[DATABASE] Updated item " .. itemName .. " for store " .. storeType .. " (Rows affected: " .. tostring(rowsAffected) .. ")^7")
+                    end)
+                else
+                    -- Insert new record
+                    MySQL.Async.execute('INSERT INTO store_inventory (store, item, stock, last_restock) VALUES (?, ?, ?, ?)', {
+                        storeType,
+                        itemName,
+                        stock,
+                        os.date('%Y-%m-%d %H:%M:%S', os.time())
+                    }, function(rowsAffected)
+                        print("^2[DATABASE] Inserted item " .. itemName .. " for store " .. storeType .. " (Rows affected: " .. tostring(rowsAffected) .. ")^7")
+                    end)
+                end
+            end)
+            
+            -- Add to store config inventory
+            local found = false
+            for _, item in ipairs(Config.Stores[storeType].inventory) do
+                if item == itemName then
+                    found = true
+                    break
+                end
+            end
+            
+            if not found then
+                table.insert(Config.Stores[storeType].inventory, itemName)
+            end
+            
+            addedItems = addedItems + 1
+            print("^2[SUCCESS] Added " .. itemName .. " to " .. storeType .. " (Stock: " .. stock .. ")^7")
+            
+            ::continue_item_female::
+        end
+        
+        ::continue_store::
+    end
+    
+    print("^2[SUCCESS] Added/Updated " .. addedItems .. " vanilla clothing items to stores^7")
+    print("^2[vein-clothing] Vanilla clothes population completed!^7")
+    
+    -- Register items as usable again
+    RegisterClothingAsUsable()
+end
+
+-- Function to register all clothing items as usable
+function RegisterClothingAsUsable()
+    print("^3[INFO] Registering all clothing items as usable...^7")
+    local registeredCount = 0
+    
+    -- Loop through all items to find clothing
+    for itemName, item in pairs(QBCore.Shared.Items) do
+        if item.client and (item.client.category or item.client.component) then
+            -- Determine if it's a prop or regular clothing
+            local isProp = (item.client.type == 'prop' or 
+                           (item.client.category and 
+                            (item.client.category == 'hats' or 
+                             item.client.category == 'glasses' or 
+                             item.client.category == 'ears' or 
+                             item.client.category == 'watches' or 
+                             item.client.category == 'bracelets')))
+            
+            -- Register the item as useable
+            QBCore.Functions.CreateUseableItem(itemName, function(source, itemData)
+                local Player = QBCore.Functions.GetPlayer(source)
+                if not Player then return end
+                
+                local fullItemData = QBCore.Shared.Items[itemName]
+                if not fullItemData or not fullItemData.client then
+                    print("^1[ERROR] Missing client data for item: " .. itemName .. "^7")
+                    return
+                end
+                
+                -- Make a complete item object to pass to client
+                local clientItem = {
+                    name = itemName,
+                    label = fullItemData.label,
+                    client = {
+                        component = fullItemData.client.component,
+                        drawable = fullItemData.client.drawable,
+                        texture = fullItemData.client.texture,
+                        category = fullItemData.client.category,
+                        event = isProp and "vein-clothing:client:wearProp" or "vein-clothing:client:wearItem"
+                    }
+                }
+                
+                -- Additional logging to debug
+                if Config.Debug then
+                    print("^2[vein-clothing] Using item " .. itemName .. " (component: " .. 
+                          tostring(fullItemData.client.component) .. ", drawable: " .. 
+                          tostring(fullItemData.client.drawable) .. ", texture: " .. 
+                          tostring(fullItemData.client.texture) .. ")^7")
+                end
+                
+                if isProp then
+                    -- Trigger prop wear event
+                    TriggerClientEvent('vein-clothing:client:wearProp', source, clientItem)
+                else
+                    -- Trigger regular clothing wear event
+                    TriggerClientEvent('vein-clothing:client:wearItem', source, clientItem)
+                end
+                
+                -- Log the clothing usage
+                if Config.Debug then
+                    print("^2[vein-clothing] Player " .. Player.PlayerData.citizenid .. " used clothing item: " .. itemName .. "^7")
+                end
+            end)
+            
+            registeredCount = registeredCount + 1
+        end
+    end
+    
+    print("^2[SUCCESS] Registered " .. registeredCount .. " clothing items as usable^7")
+end 
