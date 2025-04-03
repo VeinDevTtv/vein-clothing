@@ -1983,6 +1983,9 @@ end, false) -- Changed to false to make it unrestricted
 function AddVanillaClothes()
     print("^2[vein-clothing] Starting vanilla clothes population...^7")
     
+    -- Initialize counter for added items
+    local addedItems = 0
+    
     -- First, register items in QBCore.Shared.Items if not already there
     local registeredCount = 0
     
