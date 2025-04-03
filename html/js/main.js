@@ -212,6 +212,8 @@ const app = new Vue({
         closeUI() {
             this.visible = false;
             $.post('https://vein-clothing/close', JSON.stringify({}));
+            // Also try the other endpoint for compatibility
+            $.post('https://vein-clothing/closeUI', JSON.stringify({}));
         },
         
         // Item Management
@@ -532,95 +534,79 @@ const app = new Vue({
             // Debug message
             console.log('Received NUI message:', data);
             
-            switch (data.type) {
-                case 'show':
-                    this.visible = true;
-                    this.inStore = data.inStore || false;
-                    this.inLaundromat = data.inLaundromat || false;
-                    this.inTailor = data.inTailor || false;
-                    this.currentStore = data.store || null;
-                    this.playerMoney = data.money || 0;
-                    this.storeItems = data.storeItems || [];
-                    this.wardrobeItems = data.wardrobeItems || [];
-                    this.wishlistItems = data.wishlistItems || [];
-                    this.outfits = data.outfits || [];
-                    this.dirtyItems = data.dirtyItems || [];
-                    this.damagedItems = data.damagedItems || [];
-                    this.nearbyPlayers = data.nearbyPlayers || [];
-                    break;
-                
-                // For backward compatibility with the old format
-                case 'openStore':
-                case 'action':
-                    if (data.action === "openStore") {
-                        this.visible = true;
-                        this.inStore = true;
-                        this.inLaundromat = false;
-                        this.inTailor = false;
-                        this.currentStore = data.store || data.storeData || null;
-                        this.playerMoney = data.playerMoney || 0;
-                        this.storeItems = data.inventory || [];
-                        this.currentView = 'store';
-                    } else if (data.action === "hide") {
-                        this.visible = false;
-                        this.showModal = false;
-                        this.modalType = '';
-                        this.currentView = 'store';
-                        console.log('UI hidden by client request');
-                    } else if (data.action === "initialize") {
-                        // Initialize default UI state
-                        this.visible = false;
-                        this.inStore = false;
-                        this.inLaundromat = false;
-                        this.inTailor = false;
-                        this.currentStore = null;
-                        this.currentView = 'store';
-                        this.debug = data.debug || false;
-                        console.log('UI initialized with debug mode:', this.debug);
-                    }
-                    break;
-                    
-                case 'updateMoney':
-                    this.playerMoney = data.money;
-                    break;
-                    
-                case 'updateStoreItems':
-                    this.storeItems = data.items;
-                    break;
-                    
-                case 'updateWardrobeItems':
-                    this.wardrobeItems = data.items;
-                    break;
-                    
-                case 'updateWishlistItems':
-                    this.wishlistItems = data.items;
-                    break;
-                    
-                case 'updateOutfits':
-                    this.outfits = data.outfits;
-                    break;
-                    
-                case 'updateDirtyItems':
-                    this.dirtyItems = data.items;
-                    break;
-                    
-                case 'updateDamagedItems':
-                    this.damagedItems = data.items;
-                    break;
-                    
-                case 'updateNearbyPlayers':
-                    this.nearbyPlayers = data.players;
-                    break;
-                    
-                case 'showOffer':
-                    this.showModal = true;
-                    this.modalType = 'offerReceived';
-                    this.offerData = data.offer;
-                    break;
-                    
-                case 'notification':
-                    this.addNotification(data.message, data.notificationType);
-                    break;
+            if (data.type === "show") {
+                // New show format
+                this.visible = true;
+                this.inStore = data.inStore || false;
+                this.inLaundromat = data.inLaundromat || false;
+                this.inTailor = data.inTailor || false;
+                this.currentStore = data.store || null;
+                this.playerMoney = data.money || 0;
+                this.storeItems = data.storeItems || [];
+                this.wardrobeItems = data.wardrobeItems || [];
+                this.wishlistItems = data.wishlistItems || [];
+                this.outfits = data.outfits || [];
+                this.dirtyItems = data.dirtyItems || [];
+                this.damagedItems = data.damagedItems || [];
+                this.nearbyPlayers = data.nearbyPlayers || [];
+                this.currentView = this.inStore ? 'store' : (this.inLaundromat ? 'laundry' : (this.inTailor ? 'repair' : 'wardrobe'));
+                console.log('UI visible:', this.visible, 'Current view:', this.currentView);
+            } else if (data.type === "hide") {
+                // New hide format
+                this.visible = false;
+                this.showModal = false;
+                this.modalType = '';
+                console.log('UI hidden by client type:hide request');
+            } else if (data.action === "openStore") {
+                // Legacy format
+                this.visible = true;
+                this.inStore = true;
+                this.inLaundromat = false;
+                this.inTailor = false;
+                this.currentStore = data.store || data.storeData || null;
+                this.playerMoney = data.playerMoney || 0;
+                this.storeItems = data.inventory || [];
+                this.currentView = 'store';
+                console.log('UI visible (legacy format):', this.visible, 'Current view:', this.currentView);
+            } else if (data.action === "hide") {
+                // Legacy hide format
+                this.visible = false;
+                this.showModal = false;
+                this.modalType = '';
+                this.currentView = 'store';
+                console.log('UI hidden by client action:hide request');
+            } else if (data.action === "initialize") {
+                // Initialize default UI state
+                this.visible = false;
+                this.inStore = false;
+                this.inLaundromat = false;
+                this.inTailor = false;
+                this.currentStore = null;
+                this.currentView = 'store';
+                this.debug = data.debug || false;
+                console.log('UI initialized with debug mode:', this.debug);
+            } else if (data.type === 'updateMoney') {
+                this.playerMoney = data.money;
+            } else if (data.type === 'updateStoreItems') {
+                this.storeItems = data.items;
+            } else if (data.type === 'updateWardrobeItems') {
+                this.wardrobeItems = data.items;
+            } else if (data.type === 'updateWishlistItems') {
+                this.wishlistItems = data.items;
+            } else if (data.type === 'updateOutfits') {
+                this.outfits = data.outfits;
+            } else if (data.type === 'updateDirtyItems') {
+                this.dirtyItems = data.items;
+            } else if (data.type === 'updateDamagedItems') {
+                this.damagedItems = data.items;
+            } else if (data.type === 'updateNearbyPlayers') {
+                this.nearbyPlayers = data.players;
+            } else if (data.type === 'showOffer') {
+                this.showModal = true;
+                this.modalType = 'offerReceived';
+                this.offerData = data.offer;
+            } else if (data.type === 'notification') {
+                this.addNotification(data.message, data.notificationType);
             }
         });
         

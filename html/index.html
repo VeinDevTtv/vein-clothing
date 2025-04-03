@@ -11,6 +11,14 @@
 </head>
 <body>
     <div id="app">
+        <!-- Debug Info -->
+        <div class="debug-info" v-if="debug">
+            <div>Connection: ✓ Connected</div>
+            <div>Visible: {{ visible ? '✓ Yes' : '✗ No' }}</div>
+            <div>Current Store: {{ currentStore ? currentStore.name : 'None' }}</div>
+            <div>View: {{ currentView }}</div>
+        </div>
+        
         <!-- Main Container -->
         <div class="container" v-if="visible">
             <!-- Header -->

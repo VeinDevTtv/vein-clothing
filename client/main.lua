@@ -1185,9 +1185,27 @@ function OpenClothingStore(storeName)
         return
     end
     
+    -- Store the current store name globally
+    currentStore = storeName
+    
     -- Get player gender
     local gender = GetPlayerGender()
     print("^2[vein-clothing] Player gender: " .. gender .. "^7")
+    
+    -- Get player money
+    local playerMoney = 0
+    local playerData = QBCore.Functions.GetPlayerData()
+    if playerData and playerData.money then
+        playerMoney = playerData.money.cash or 0
+    end
+    
+    -- First, reset any existing UI state to ensure it's fresh
+    SendNUIMessage({
+        action = "hide"
+    })
+    
+    -- Wait a small moment for the UI to reset
+    Citizen.Wait(100)
     
     -- Get available clothing items for this store and gender
     QBCore.Functions.TriggerCallback('vein-clothing:server:getStoreItems', function(items, wishlist)
@@ -1203,25 +1221,40 @@ function OpenClothingStore(storeName)
         isInClothingStore = true
         SetNuiFocus(true, true)
         
-        -- Create store data structure for UI
-        local storeDataForUI = {
-            name = storeName,
-            label = storeData.label,
-            inventory = items,
-            wishlist = wishlist or {}
-        }
-        
-        -- Send data to NUI
+        -- Send data to NUI with correct format using type and action
         print("^2[vein-clothing] Sending data to NUI...^7")
         SendNUIMessage({
-            action = "openStore",
-            storeData = storeDataForUI
+            type = "show",
+            inStore = true,
+            inLaundromat = false,
+            inTailor = false,
+            store = {
+                name = storeName,
+                label = storeData.label or storeName
+            },
+            money = playerMoney,
+            storeItems = items,
+            wishlistItems = wishlist or {}
         })
         
         -- Verify UI state after brief delay
         Citizen.SetTimeout(500, function()
             if not isInClothingStore then
                 print("^1[ERROR] Store UI state inconsistent. isInClothingStore = false after UI open attempt^7")
+                -- Try to re-open if not visible
+                SendNUIMessage({
+                    type = "show",
+                    inStore = true,
+                    inLaundromat = false,
+                    inTailor = false,
+                    store = {
+                        name = storeName,
+                        label = storeData.label or storeName
+                    },
+                    money = playerMoney,
+                    storeItems = items,
+                    wishlistItems = wishlist or {}
+                })
             end
         end)
     end, storeName, gender)
@@ -1348,10 +1381,24 @@ end)
 RegisterNUICallback('closeUI', function(data, cb)
     print("^2[vein-clothing] closeUI callback received, closing UI...^7")
     
+    CloseClothingUI()
+    
+    cb({success = true})
+end)
+
+RegisterNUICallback('close', function(data, cb)
+    print("^2[vein-clothing] close callback received, closing UI...^7")
+    
+    CloseClothingUI()
+    
+    cb({success = true})
+end)
+
+-- Function to close the clothing UI
+function CloseClothingUI()
     -- Reset UI state
     isInClothingStore = false
     inWardrobe = false
-    currentStore = nil
     
     -- Release focus
     SetNuiFocus(false, false)
@@ -1362,14 +1409,17 @@ RegisterNUICallback('closeUI', function(data, cb)
         SetEntityHeading(playerPed, lastHeading or 0.0)
     end
     
-    -- Fully hide the UI
+    -- Fully hide the UI using both message formats for compatibility
+    SendNUIMessage({
+        type = "hide"
+    })
+    
     SendNUIMessage({
         action = "hide"
     })
     
     print("^2[vein-clothing] UI closed successfully^7")
-    cb({success = true})
-end)
+end
 
 -- Function to handle inventory interactions based on config
 function HandleInventory(action, ...)

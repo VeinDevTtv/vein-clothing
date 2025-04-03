@@ -82,6 +82,10 @@ body {
     justify-content: center;
     align-items: center;
     background-color: rgba(0, 0, 0, 0.4);
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 999;
 }
 
 /* Container */
@@ -96,6 +100,7 @@ body {
     flex-direction: column;
     box-shadow: var(--shadow-lg);
     animation: fadeIn 0.3s ease-in-out;
+    z-index: 1000;
 }
 
 /* Header */
@@ -1119,4 +1124,19 @@ body {
         border-right: none;
         border-bottom: 1px solid var(--border);
     }
+}
+
+/* Debug Info */
+.debug-info {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: #22FF22;
+    padding: 10px;
+    border-radius: 5px;
+    font-family: monospace;
+    z-index: 9999;
+    font-size: 14px;
+    line-height: 1.5;
 } 
