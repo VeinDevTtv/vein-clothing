@@ -1109,13 +1109,61 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
         return false, "Item not found"
     end
     
+    -- Special debug for necklace items
+    if string.find(string.lower(itemName), "necklace") or string.find(string.lower(itemName), "chain") or string.find(string.lower(itemName), "pearl") then
+        print("^3[NECKLACE-DEBUG] Processing necklace item: " .. itemName .. "^7")
+        print("^3[NECKLACE-DEBUG] Item data:")
+        print("^3[NECKLACE-DEBUG] - label: " .. tostring(item.label))
+        print("^3[NECKLACE-DEBUG] - category: " .. tostring(item.client and item.client.category))
+        print("^3[NECKLACE-DEBUG] - component: " .. tostring(item.client and item.client.component))
+        print("^3[NECKLACE-DEBUG] - drawable: " .. tostring(item.client and item.client.drawable))
+        print("^3[NECKLACE-DEBUG] - texture: " .. tostring(item.client and item.client.texture))
+        
+        -- Ensure necklace has correct component
+        if item.client and not item.client.component then
+            item.client.component = 7 -- 7 is for necklaces
+            print("^3[NECKLACE-DEBUG] Fixed missing component, set to 7 (necklace)^7")
+        end
+        
+        -- Ensure drawable and texture
+        if item.client and not item.client.drawable then
+            item.client.drawable = 0
+            print("^3[NECKLACE-DEBUG] Fixed missing drawable, set to 0^7")
+        end
+        
+        if item.client and not item.client.texture then
+            item.client.texture = 0
+            print("^3[NECKLACE-DEBUG] Fixed missing texture, set to 0^7")
+        end
+    end
+    
     -- Verify the item has all required client data
     if not item.client or not item.client.component or not item.client.drawable or not item.client.texture then
         print("^1[ERROR-SERVER] Item missing required client data: " .. itemName .. "^7")
         print("^1[ERROR-SERVER] component: " .. tostring(item.client and item.client.component) .. 
               ", drawable: " .. tostring(item.client and item.client.drawable) .. 
               ", texture: " .. tostring(item.client and item.client.texture) .. "^7")
-        return false, "Invalid item configuration"
+        
+        -- Attempt to fix missing data
+        if not item.client then
+            item.client = {}
+            print("^3[WARNING-SERVER] Created missing client object for: " .. itemName .. "^7")
+        end
+        
+        if not item.client.component then
+            item.client.component = 11 -- Default to torso
+            print("^3[WARNING-SERVER] Set default component 11 for: " .. itemName .. "^7")
+        end
+        
+        if not item.client.drawable then
+            item.client.drawable = 0
+            print("^3[WARNING-SERVER] Set default drawable 0 for: " .. itemName .. "^7")
+        end
+        
+        if not item.client.texture then
+            item.client.texture = 0
+            print("^3[WARNING-SERVER] Set default texture 0 for: " .. itemName .. "^7")
+        end
     end
     
     -- Calculate price
@@ -1171,13 +1219,20 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
         purchased = true -- Indicates item was purchased (not found/crafted)
     }
     
-    -- Use the HandleInventory function to add item instead of direct Player.Functions.AddItem
-    local added = HandleInventory('addItem', src, itemName, 1, info)
-    
-    -- Legacy fallback in case HandleInventory doesn't work
-    if added == nil then
-        print("^3[WARNING-SERVER] HandleInventory function returned nil, trying direct method^7")
+    -- Try direct method for items that have issues with HandleInventory
+    local added = false
+    if string.find(string.lower(itemName), "necklace") or string.find(string.lower(itemName), "chain") or string.find(string.lower(itemName), "pearl") then
+        print("^3[NECKLACE-DEBUG] Using direct Player.Functions.AddItem for necklace^7")
         added = Player.Functions.AddItem(itemName, 1, nil, info)
+    else
+        -- Use the HandleInventory function to add item
+        added = HandleInventory('addItem', src, itemName, 1, info)
+        
+        -- Try direct method if HandleInventory fails
+        if not added then
+            print("^3[WARNING-SERVER] HandleInventory function failed, trying direct method^7")
+            added = Player.Functions.AddItem(itemName, 1, nil, info)
+        end
     end
     
     if not added then
@@ -1648,19 +1703,64 @@ function PopulateStoreInventories()
         for _, itemName in ipairs(genderItems.male) do
             -- Make sure the item exists in QBCore.Shared.Items
             if not QBCore.Shared.Items[itemName] then
-                print("^3[WARNING] Item " .. itemName .. " not found in QBCore.Shared.Items, skipping^7")
+                print("^1[ERROR] Item " .. itemName .. " not found in QBCore.Shared.Items^7")
                 goto continue_item_male
             end
             
-            -- Create default stock values
+            -- Ensure item has proper client data with component, drawable, texture
+            if not QBCore.Shared.Items[itemName].client then
+                QBCore.Shared.Items[itemName].client = {}
+                print("^3[DEBUG-ITEMS] Adding missing client object to item: " .. itemName .. "^7")
+            end
+            
+            -- Add default component based on category if missing
+            if not QBCore.Shared.Items[itemName].client.component then
+                -- Determine category from name if not set
+                local category = "shirts"
+                local itemNameLower = string.lower(itemName)
+                
+                if string.find(itemNameLower, "pant") or string.find(itemNameLower, "jean") or string.find(itemNameLower, "trouser") then
+                    category = "pants"
+                    QBCore.Shared.Items[itemName].client.component = 4 -- Legs
+                elseif string.find(itemNameLower, "shoe") or string.find(itemNameLower, "boot") or string.find(itemNameLower, "sneaker") then
+                    category = "shoes"
+                    QBCore.Shared.Items[itemName].client.component = 6 -- Feet
+                elseif string.find(itemNameLower, "hat") or string.find(itemNameLower, "cap") or string.find(itemNameLower, "helmet") then
+                    category = "hats"
+                    QBCore.Shared.Items[itemName].client.component = 0 -- Head props
+                elseif string.find(itemNameLower, "glass") or string.find(itemNameLower, "sunglass") then
+                    category = "glasses"
+                    QBCore.Shared.Items[itemName].client.component = 1 -- Eye props
+                elseif string.find(itemNameLower, "watch") then
+                    category = "accessories"
+                    QBCore.Shared.Items[itemName].client.component = 6 -- Wrist
+                elseif string.find(itemNameLower, "necklace") or string.find(itemNameLower, "chain") then
+                    category = "accessories"
+                    QBCore.Shared.Items[itemName].client.component = 7 -- Neck
+                else
+                    -- Default to torso
+                    QBCore.Shared.Items[itemName].client.component = 11 -- Torso
+                end
+                
+                QBCore.Shared.Items[itemName].client.category = QBCore.Shared.Items[itemName].client.category or category
+                print("^3[DEBUG-ITEMS] Added component " .. QBCore.Shared.Items[itemName].client.component .. " to item: " .. itemName .. "^7")
+            end
+            
+            -- Add default drawable/texture if missing
+            if not QBCore.Shared.Items[itemName].client.drawable then
+                QBCore.Shared.Items[itemName].client.drawable = 0
+                print("^3[DEBUG-ITEMS] Added default drawable 0 to item: " .. itemName .. "^7")
+            end
+            
+            if not QBCore.Shared.Items[itemName].client.texture then
+                QBCore.Shared.Items[itemName].client.texture = 0
+                print("^3[DEBUG-ITEMS] Added default texture 0 to item: " .. itemName .. "^7")
+            end
+            
+            -- Create stock data
             local rarity = QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.rarity or "common"
             local maxStock = (Config.Rarity[rarity] and Config.Rarity[rarity].maxStock) or 10
             local stock = math.random(1, maxStock)
-            
-            -- Initialize StoreStock if needed
-            if not StoreStock[storeType] then
-                StoreStock[storeType] = {}
-            end
             
             -- Add to StoreStock
             StoreStock[storeType][itemName] = {
@@ -1670,19 +1770,21 @@ function PopulateStoreInventories()
                 lastRestock = os.time()
             }
             
-            -- Check if item exists in database
+            -- Force insert into database
             MySQL.Async.fetchScalar('SELECT COUNT(*) FROM store_inventory WHERE store = ? AND item = ?', {
                 storeType,
                 itemName
             }, function(count)
-                if count > 0 then
+                if count and count > 0 then
                     -- Update existing record
                     MySQL.Async.execute('UPDATE store_inventory SET stock = ?, last_restock = ? WHERE store = ? AND item = ?', {
                         stock,
                         os.date('%Y-%m-%d %H:%M:%S', os.time()),
                         storeType,
                         itemName
-                    })
+                    }, function(rowsAffected)
+                        print("^2[DATABASE] Updated item " .. itemName .. " for store " .. storeType .. " (Rows affected: " .. tostring(rowsAffected) .. ")^7")
+                    end)
                 else
                     -- Insert new record
                     MySQL.Async.execute('INSERT INTO store_inventory (store, item, stock, last_restock) VALUES (?, ?, ?, ?)', {
@@ -1690,11 +1792,13 @@ function PopulateStoreInventories()
                         itemName,
                         stock,
                         os.date('%Y-%m-%d %H:%M:%S', os.time())
-                    })
+                    }, function(rowsAffected)
+                        print("^2[DATABASE] Inserted item " .. itemName .. " for store " .. storeType .. " (Rows affected: " .. tostring(rowsAffected) .. ")^7")
+                    end)
                 end
             end)
             
-            -- Add to store config inventory array if not already there
+            -- Add to store config inventory
             local found = false
             for _, item in ipairs(Config.Stores[storeType].inventory) do
                 if item == itemName then
@@ -1706,6 +1810,9 @@ function PopulateStoreInventories()
             if not found then
                 table.insert(Config.Stores[storeType].inventory, itemName)
             end
+            
+            addedItems = addedItems + 1
+            print("^2[SUCCESS] Added " .. itemName .. " to " .. storeType .. " (Stock: " .. stock .. ")^7")
             
             ::continue_item_male::
         end
@@ -1714,19 +1821,67 @@ function PopulateStoreInventories()
         for _, itemName in ipairs(genderItems.female) do
             -- Make sure the item exists in QBCore.Shared.Items
             if not QBCore.Shared.Items[itemName] then
-                print("^3[WARNING] Item " .. itemName .. " not found in QBCore.Shared.Items, skipping^7")
+                print("^1[ERROR] Item " .. itemName .. " not found in QBCore.Shared.Items^7")
                 goto continue_item_female
             end
             
-            -- Create default stock values
+            -- Ensure item has proper client data with component, drawable, texture
+            if not QBCore.Shared.Items[itemName].client then
+                QBCore.Shared.Items[itemName].client = {}
+                print("^3[DEBUG-ITEMS] Adding missing client object to item: " .. itemName .. "^7")
+            end
+            
+            -- Add default component based on category if missing
+            if not QBCore.Shared.Items[itemName].client.component then
+                -- Determine category from name if not set
+                local category = "shirts"
+                local itemNameLower = string.lower(itemName)
+                
+                if string.find(itemNameLower, "pant") or string.find(itemNameLower, "jean") or string.find(itemNameLower, "trouser") or string.find(itemNameLower, "skirt") then
+                    category = "pants"
+                    QBCore.Shared.Items[itemName].client.component = 4 -- Legs
+                elseif string.find(itemNameLower, "shoe") or string.find(itemNameLower, "boot") or string.find(itemNameLower, "heel") or string.find(itemNameLower, "sneaker") then
+                    category = "shoes"
+                    QBCore.Shared.Items[itemName].client.component = 6 -- Feet
+                elseif string.find(itemNameLower, "hat") or string.find(itemNameLower, "cap") or string.find(itemNameLower, "helmet") then
+                    category = "hats"
+                    QBCore.Shared.Items[itemName].client.component = 0 -- Head props
+                elseif string.find(itemNameLower, "glass") or string.find(itemNameLower, "sunglass") then
+                    category = "glasses"
+                    QBCore.Shared.Items[itemName].client.component = 1 -- Eye props
+                elseif string.find(itemNameLower, "watch") then
+                    category = "accessories"
+                    QBCore.Shared.Items[itemName].client.component = 6 -- Wrist
+                elseif string.find(itemNameLower, "necklace") or string.find(itemNameLower, "pearl") or string.find(itemNameLower, "chain") then
+                    category = "accessories"
+                    QBCore.Shared.Items[itemName].client.component = 7 -- Neck / Neck accessories
+                elseif string.find(itemNameLower, "earring") then
+                    category = "accessories"
+                    QBCore.Shared.Items[itemName].client.component = 2 -- Ears
+                else
+                    -- Default to torso
+                    QBCore.Shared.Items[itemName].client.component = 11 -- Torso
+                end
+                
+                QBCore.Shared.Items[itemName].client.category = QBCore.Shared.Items[itemName].client.category or category
+                print("^3[DEBUG-ITEMS] Added component " .. QBCore.Shared.Items[itemName].client.component .. " to item: " .. itemName .. "^7")
+            end
+            
+            -- Add default drawable/texture if missing
+            if not QBCore.Shared.Items[itemName].client.drawable then
+                QBCore.Shared.Items[itemName].client.drawable = 0
+                print("^3[DEBUG-ITEMS] Added default drawable 0 to item: " .. itemName .. "^7")
+            end
+            
+            if not QBCore.Shared.Items[itemName].client.texture then
+                QBCore.Shared.Items[itemName].client.texture = 0
+                print("^3[DEBUG-ITEMS] Added default texture 0 to item: " .. itemName .. "^7")
+            end
+            
+            -- Create stock data
             local rarity = QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.rarity or "common"
             local maxStock = (Config.Rarity[rarity] and Config.Rarity[rarity].maxStock) or 10
             local stock = math.random(1, maxStock)
-            
-            -- Initialize StoreStock if needed
-            if not StoreStock[storeType] then
-                StoreStock[storeType] = {}
-            end
             
             -- Add to StoreStock
             StoreStock[storeType][itemName] = {
@@ -1736,19 +1891,21 @@ function PopulateStoreInventories()
                 lastRestock = os.time()
             }
             
-            -- Check if item exists in database
+            -- Force insert into database
             MySQL.Async.fetchScalar('SELECT COUNT(*) FROM store_inventory WHERE store = ? AND item = ?', {
                 storeType,
                 itemName
             }, function(count)
-                if count > 0 then
+                if count and count > 0 then
                     -- Update existing record
                     MySQL.Async.execute('UPDATE store_inventory SET stock = ?, last_restock = ? WHERE store = ? AND item = ?', {
                         stock,
                         os.date('%Y-%m-%d %H:%M:%S', os.time()),
                         storeType,
                         itemName
-                    })
+                    }, function(rowsAffected)
+                        print("^2[DATABASE] Updated item " .. itemName .. " for store " .. storeType .. " (Rows affected: " .. tostring(rowsAffected) .. ")^7")
+                    end)
                 else
                     -- Insert new record
                     MySQL.Async.execute('INSERT INTO store_inventory (store, item, stock, last_restock) VALUES (?, ?, ?, ?)', {
@@ -1756,11 +1913,13 @@ function PopulateStoreInventories()
                         itemName,
                         stock,
                         os.date('%Y-%m-%d %H:%M:%S', os.time())
-                    })
+                    }, function(rowsAffected)
+                        print("^2[DATABASE] Inserted item " .. itemName .. " for store " .. storeType .. " (Rows affected: " .. tostring(rowsAffected) .. ")^7")
+                    end)
                 end
             end)
             
-            -- Add to store config inventory array if not already there
+            -- Add to store config inventory
             local found = false
             for _, item in ipairs(Config.Stores[storeType].inventory) do
                 if item == itemName then
@@ -1772,6 +1931,9 @@ function PopulateStoreInventories()
             if not found then
                 table.insert(Config.Stores[storeType].inventory, itemName)
             end
+            
+            addedItems = addedItems + 1
+            print("^2[SUCCESS] Added " .. itemName .. " to " .. storeType .. " (Stock: " .. stock .. ")^7")
             
             ::continue_item_female::
         end
@@ -1996,9 +2158,63 @@ function AddVanillaClothes()
         
         -- Process female items (similar to male items)
         for _, itemName in ipairs(genderItems.female) do
+            -- Make sure the item exists in QBCore.Shared.Items
             if not QBCore.Shared.Items[itemName] then
                 print("^1[ERROR] Item " .. itemName .. " not found in QBCore.Shared.Items^7")
                 goto continue_item_female
+            end
+            
+            -- Ensure item has proper client data with component, drawable, texture
+            if not QBCore.Shared.Items[itemName].client then
+                QBCore.Shared.Items[itemName].client = {}
+                print("^3[DEBUG-ITEMS] Adding missing client object to item: " .. itemName .. "^7")
+            end
+            
+            -- Add default component based on category if missing
+            if not QBCore.Shared.Items[itemName].client.component then
+                -- Determine category from name if not set
+                local category = "shirts"
+                local itemNameLower = string.lower(itemName)
+                
+                if string.find(itemNameLower, "pant") or string.find(itemNameLower, "jean") or string.find(itemNameLower, "trouser") or string.find(itemNameLower, "skirt") then
+                    category = "pants"
+                    QBCore.Shared.Items[itemName].client.component = 4 -- Legs
+                elseif string.find(itemNameLower, "shoe") or string.find(itemNameLower, "boot") or string.find(itemNameLower, "heel") or string.find(itemNameLower, "sneaker") then
+                    category = "shoes"
+                    QBCore.Shared.Items[itemName].client.component = 6 -- Feet
+                elseif string.find(itemNameLower, "hat") or string.find(itemNameLower, "cap") or string.find(itemNameLower, "helmet") then
+                    category = "hats"
+                    QBCore.Shared.Items[itemName].client.component = 0 -- Head props
+                elseif string.find(itemNameLower, "glass") or string.find(itemNameLower, "sunglass") then
+                    category = "glasses"
+                    QBCore.Shared.Items[itemName].client.component = 1 -- Eye props
+                elseif string.find(itemNameLower, "watch") then
+                    category = "accessories"
+                    QBCore.Shared.Items[itemName].client.component = 6 -- Wrist
+                elseif string.find(itemNameLower, "necklace") or string.find(itemNameLower, "pearl") or string.find(itemNameLower, "chain") then
+                    category = "accessories"
+                    QBCore.Shared.Items[itemName].client.component = 7 -- Neck / Neck accessories
+                elseif string.find(itemNameLower, "earring") then
+                    category = "accessories"
+                    QBCore.Shared.Items[itemName].client.component = 2 -- Ears
+                else
+                    -- Default to torso
+                    QBCore.Shared.Items[itemName].client.component = 11 -- Torso
+                end
+                
+                QBCore.Shared.Items[itemName].client.category = QBCore.Shared.Items[itemName].client.category or category
+                print("^3[DEBUG-ITEMS] Added component " .. QBCore.Shared.Items[itemName].client.component .. " to item: " .. itemName .. "^7")
+            end
+            
+            -- Add default drawable/texture if missing
+            if not QBCore.Shared.Items[itemName].client.drawable then
+                QBCore.Shared.Items[itemName].client.drawable = 0
+                print("^3[DEBUG-ITEMS] Added default drawable 0 to item: " .. itemName .. "^7")
+            end
+            
+            if not QBCore.Shared.Items[itemName].client.texture then
+                QBCore.Shared.Items[itemName].client.texture = 0
+                print("^3[DEBUG-ITEMS] Added default texture 0 to item: " .. itemName .. "^7")
             end
             
             -- Create stock data

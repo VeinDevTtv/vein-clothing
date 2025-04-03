@@ -2487,5 +2487,9 @@ function UpdateMoneyDisplay()
         if Config.Debug then
             print("^2[vein-clothing] Updated money display in UI. Cash: $" .. (playerData.money.cash or 0) .. ", Bank: $" .. (playerData.money.bank or 0) .. "^7")
         end
+    else
+        if Config.Debug then
+            print("^1[vein-clothing] Unable to update money display: Invalid player data^7")
+        end
     end
 end
