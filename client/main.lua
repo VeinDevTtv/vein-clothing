@@ -8,6 +8,28 @@ local clothingPeds = {}
 local storeNPCs = {}
 local storeZones = {}
 
+-- Forward declarations of functions that are used before their actual definitions
+-- We need to define them as empty functions first, then they'll be overwritten with the actual implementations later
+LoadStores = function() 
+    print("^3[vein-clothing] LoadStores function not fully initialized yet. Please wait...^7")
+    return false 
+end
+
+LoadLaundromats = function() 
+    print("^3[vein-clothing] LoadLaundromats function not fully initialized yet. Please wait...^7")
+    return false 
+end
+
+LoadTailors = function() 
+    print("^3[vein-clothing] LoadTailors function not fully initialized yet. Please wait...^7")
+    return false 
+end
+
+LoadPlayerOutfit = function() 
+    print("^3[vein-clothing] LoadPlayerOutfit function not fully initialized yet. Please wait...^7")
+    return false 
+end
+
 -- Ensure Config exists
 if not Config then
     Config = {}
@@ -22,44 +44,95 @@ local mockOnPlayerInOut = function(cb) end
 local MockCircleZone = {}
 MockCircleZone.__index = MockCircleZone
 
--- Create a new mock zone
-function MockCircleZone.new(coords, radius, options)
-    local self = setmetatable({}, MockCircleZone)
-    self.coords = coords
-    self.radius = radius
-    self.options = options
-    self.name = options and options.name or "unnamed"
-    return self
-end
+-- Import PolyZone for zone creation if available
+local CircleZone = nil
 
--- Dummy destroy method
-function MockCircleZone:destroy()
-    print("^3[DEBUG] Destroying mock zone: " .. self.name .. "^7")
-    -- Nothing to actually destroy in the mock implementation
-end
-
--- Dummy onPlayerInOut method
-function MockCircleZone:onPlayerInOut(cb)
-    -- Store the callback but we don't actually check player position in this mock
-    self.callback = cb
-end
-
--- Import PolyZone for zone creation
-local CircleZone = {}
-
--- Check if PolyZone is available
-if GetResourceState('PolyZone') ~= 'missing' then
-    -- Use the real PolyZone if available - proper way to get CircleZone
-    CircleZone = {}
-    CircleZone.Create = function(coords, radius, options)
-        return exports['PolyZone']:CreateCircleZone(coords, radius, options)
+-- Safely attempt to load PolyZone
+Citizen.CreateThread(function()
+    -- Wait a moment for all resources to load
+    Citizen.Wait(500)
+    
+    -- Check if PolyZone is available
+    if GetResourceState('PolyZone') ~= 'missing' then
+        -- Try to fetch the CircleZone from PolyZone
+        local success, result = pcall(function()
+            return exports['PolyZone']:GetCircleZone()
+        end)
+        
+        if success and result then
+            -- Successfully got CircleZone from PolyZone
+            CircleZone = result
+            print("^2[vein-clothing] Successfully loaded CircleZone from PolyZone^7")
+        else
+            -- Try alternative export method
+            success, result = pcall(function()
+                -- Create a test zone to verify the export works
+                local testZone = exports['PolyZone']:CreateCircleZone(
+                    vector3(0, 0, 0),  -- Far away test location
+                    1.0,                -- Small radius
+                    { name = "test_zone" }
+                )
+                testZone:destroy()     -- Clean up test zone
+                
+                -- Return a wrapper that uses the exports directly
+                return {
+                    Create = function(coords, radius, options)
+                        return exports['PolyZone']:CreateCircleZone(coords, radius, options)
+                    end
+                }
+            end)
+            
+            if success and result then
+                CircleZone = result
+                print("^2[vein-clothing] Successfully created CircleZone wrapper for PolyZone^7")
+            else
+                -- Use mock implementation as fallback
+                print("^3[vein-clothing] PolyZone found but could not access CircleZone, using fallback implementation^7")
+                CircleZone = CreateMockCircleZone()
+            end
+        end
+    else
+        -- PolyZone not available, use mock implementation
+        print("^3[vein-clothing] PolyZone resource not found, using fallback zone implementation^7")
+        CircleZone = CreateMockCircleZone()
     end
-else
-    -- Use our mock implementation
-    print("^3[WARNING] PolyZone not found. Using mock CircleZone implementation.^7")
-    CircleZone = {}
-    -- Override the Create function to use our mock
-    CircleZone.Create = MockCircleZone.new
+end)
+
+-- Creates a mock implementation of CircleZone that does nothing but prevents errors
+function CreateMockCircleZone()
+    local MockCircleZone = {}
+    
+    -- Constructor function that returns a mock zone object
+    MockCircleZone.Create = function(coords, radius, options)
+        local mockZone = {
+            -- Store the creation parameters
+            coords = coords,
+            radius = radius,
+            options = options or {},
+            
+            -- Callbacks storage
+            callbacks = {},
+            
+            -- Mock destroy method
+            destroy = function(self)
+                -- Clear any references to allow proper garbage collection
+                self.callbacks = {}
+                return true
+            end,
+            
+            -- Mock onPlayerInOut method
+            onPlayerInOut = function(self, cb)
+                if type(cb) == "function" then
+                    table.insert(self.callbacks, cb)
+                end
+                return self
+            end
+        }
+        
+        return mockZone
+    end
+    
+    return MockCircleZone
 end
 
 -- Global variables for the clothing system
@@ -108,22 +181,70 @@ end
 -- Add this safety function near the top of the file
 local function SafePlayerPedId()
     local ped = PlayerPedId()
-    if not ped or ped == 0 then
-        Wait(100)  -- Wait a bit and try again
+    local attempts = 0
+    
+    -- Try multiple times to get a valid ped ID
+    while (not ped or ped == 0) and attempts < 10 do
+        Citizen.Wait(100)
         ped = PlayerPedId()
+        attempts = attempts + 1
+        
+        -- If debugging is enabled, log the attempts
+        if Config and Config.Debug then
+            print("^3[vein-clothing] Attempting to get player ped ID, attempt " .. attempts .. "^7")
+        end
     end
-    return ped
+    
+    -- Log warning if we couldn't get a valid ped after multiple attempts
+    if not ped or ped == 0 then
+        print("^1[ERROR] Failed to get a valid PlayerPedId after " .. attempts .. " attempts^7")
+    end
+    
+    return ped or 0  -- Return 0 as fallback if ped is still nil
 end
 
 -- Initialize player data
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     PlayerData = QBCore.Functions.GetPlayerData()
     
-    -- Load the core features
-    LoadStores()
-    LoadLaundromats()
-    LoadTailors()
-    LoadPlayerOutfit()
+    -- Load the core features with error handling
+    Citizen.CreateThread(function()
+        -- Add a small delay to ensure all scripts are fully loaded
+        Citizen.Wait(1000)
+        
+        print("^2[vein-clothing] Player loaded, initializing clothing system...^7")
+        
+        -- Safely call each initialization function with error handling
+        local success, result = pcall(function()
+            return LoadStores()
+        end)
+        if not success then
+            print("^1[ERROR] Failed to load stores: " .. tostring(result) .. "^7")
+        end
+        
+        success, result = pcall(function()
+            return LoadLaundromats()
+        end)
+        if not success then
+            print("^1[ERROR] Failed to load laundromats: " .. tostring(result) .. "^7")
+        end
+        
+        success, result = pcall(function()
+            return LoadTailors()
+        end)
+        if not success then
+            print("^1[ERROR] Failed to load tailors: " .. tostring(result) .. "^7")
+        end
+        
+        success, result = pcall(function()
+            return LoadPlayerOutfit()
+        end)
+        if not success then
+            print("^1[ERROR] Failed to load player outfit: " .. tostring(result) .. "^7")
+        end
+        
+        print("^2[vein-clothing] Initialization completed for player: " .. (PlayerData.charinfo and PlayerData.charinfo.firstname or "Unknown") .. "^7")
+    end)
 end)
 
 RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
@@ -830,18 +951,54 @@ end, false)
 
 -- Initialize function (called on script start)
 function Initialize()
+    -- Print debug message for initialization start
+    print("^2[vein-clothing] Starting initialization process...^7")
+    
     -- Wait for QBCore to be fully initialized
+    local qbCoreAttempts = 0
     while not QBCore do
-        Wait(100)
+        if qbCoreAttempts > 50 then  -- 5 seconds timeout
+            print("^1[ERROR] Failed to get QBCore after 5 seconds. Aborting initialization.^7")
+            return
+        end
+        
+        Citizen.Wait(100)
+        qbCoreAttempts = qbCoreAttempts + 1
         QBCore = exports['qb-core']:GetCoreObject()
     end
     
-    -- Wait for PlayerData to be available
-    while not QBCore.Functions.GetPlayerData().citizenid do
-        Wait(100)
+    print("^2[vein-clothing] QBCore initialized, waiting for player data...^7")
+    
+    -- Wait for PlayerData to be available - with timeout
+    local playerDataAttempts = 0
+    local playerData = nil
+    
+    while playerDataAttempts < 150 do  -- 15 second timeout
+        Citizen.Wait(100)
+        playerDataAttempts = playerDataAttempts + 1
+        
+        -- Try to get player data
+        pcall(function()
+            playerData = QBCore.Functions.GetPlayerData()
+        end)
+        
+        -- Check if we have valid player data
+        if playerData and playerData.citizenid then
+            break
+        end
+        
+        -- Log progress every second
+        if playerDataAttempts % 10 == 0 and Config and Config.Debug then
+            print("^3[vein-clothing] Waiting for player data... Attempt " .. playerDataAttempts .. "/150^7")
+        end
     end
     
-    PlayerData = QBCore.Functions.GetPlayerData()
+    if not playerData or not playerData.citizenid then
+        print("^1[ERROR] Failed to get player data after 15 seconds. Continuing with partial initialization.^7")
+    else
+        PlayerData = playerData
+        print("^2[vein-clothing] Player data loaded successfully.^7")
+    end
     
     -- Initialize ClothingConfig locally to prevent circular references
     if next(ClothingConfig) == nil then
@@ -878,26 +1035,66 @@ function Initialize()
         Citizen.Wait(1000)
         
         print("^3[vein-clothing] Loading stores...^7")
-        if not LoadStores() then
-            print("^1[vein-clothing] ERROR: Failed to load stores. Aborting initialization.^7")
-            return
+        local storesLoaded = false
+        
+        -- Safely call LoadStores with error handling
+        pcall(function()
+            storesLoaded = LoadStores()
+        end)
+        
+        if not storesLoaded then
+            print("^1[vein-clothing] ERROR: Failed to load stores. Continuing with minimal initialization.^7")
         end
         
         print("^3[vein-clothing] Loading laundromats...^7")
-        if not LoadLaundromats() then
+        local laundromatsLoaded = false
+        
+        -- Safely call LoadLaundromats with error handling
+        pcall(function()
+            laundromatsLoaded = LoadLaundromats()
+        end)
+        
+        if not laundromatsLoaded then
             print("^1[vein-clothing] ERROR: Failed to load laundromats. Continuing with partial initialization.^7")
         end
         
         print("^3[vein-clothing] Loading tailors...^7")
-        if not LoadTailors() then
+        local tailorsLoaded = false
+        
+        -- Safely call LoadTailors with error handling
+        pcall(function()
+            tailorsLoaded = LoadTailors()
+        end)
+        
+        if not tailorsLoaded then
             print("^1[vein-clothing] ERROR: Failed to load tailors. Continuing with partial initialization.^7")
         end
         
         print("^3[vein-clothing] Loading player outfit...^7")
-        LoadPlayerOutfit()
+        local outfitLoaded = false
+        
+        -- Safely call LoadPlayerOutfit with error handling
+        pcall(function()
+            LoadPlayerOutfit()
+            outfitLoaded = true
+        end)
+        
+        if not outfitLoaded then
+            print("^1[vein-clothing] ERROR: Failed to load player outfit. Continuing without outfit.^7")
+        end
         
         print("^3[vein-clothing] Starting condition monitoring...^7")
-        StartConditionMonitoring()
+        local monitoringStarted = false
+        
+        -- Safely start condition monitoring with error handling
+        pcall(function()
+            StartConditionMonitoring()
+            monitoringStarted = true
+        end)
+        
+        if not monitoringStarted then
+            print("^1[vein-clothing] ERROR: Failed to start condition monitoring.^7")
+        end
         
         print("^2[vein-clothing] Initialization complete!^7")
     end)
@@ -910,18 +1107,109 @@ end
 
 -- Load player's saved outfit on spawn
 function LoadPlayerOutfit()
+    -- Debug log
+    if Config and Config.Debug then
+        print("^3[vein-clothing] Attempting to load player outfit...^7")
+    end
+    
+    -- Wrap in a CreateThread to avoid blocking
     CreateThread(function()
-        while not QBCore.Functions.GetPlayerData().citizenid do
+        -- Initialize local variables for tracking
+        local loadAttempts = 0
+        local citizenid = nil
+        local maxAttempts = 100  -- 10 second timeout
+        
+        -- Wait until we have a valid citizenid or timeout
+        while loadAttempts < maxAttempts do
+            -- Safe attempt to get player data
+            local success, playerData = pcall(function()
+                return QBCore.Functions.GetPlayerData()
+            end)
+            
+            -- Check if we got valid player data
+            if success and playerData and playerData.citizenid then
+                citizenid = playerData.citizenid
+                break
+            end
+            
+            -- Wait before trying again
             Wait(100)
+            loadAttempts = loadAttempts + 1
+            
+            -- Debug logging of attempts
+            if Config and Config.Debug and loadAttempts % 10 == 0 then
+                print("^3[vein-clothing] Waiting for citizenid... Attempt " .. loadAttempts .. "/" .. maxAttempts .. "^7")
+            end
         end
         
+        -- If we couldn't get a citizenid, log error and stop
+        if not citizenid then
+            print("^1[ERROR] Failed to get citizenid after " .. loadAttempts .. " attempts. Outfit loading aborted.^7")
+            return
+        end
+        
+        if Config and Config.Debug then
+            print("^3[vein-clothing] Got citizenid: " .. citizenid .. ". Loading default outfit...^7")
+        end
+        
+        -- Attempt to get the default outfit from server
+        local outfitLoaded = false
+        
         QBCore.Functions.TriggerCallback('vein-clothing:server:getDefaultOutfit', function(outfit)
-            if outfit and next(outfit) then
-                WearOutfit(outfit)
-                QBCore.Functions.Notify(Lang:t('info.default_outfit_loaded'), 'success')
+            -- Check if we received a valid outfit
+            if outfit and type(outfit) == "table" and next(outfit) then
+                if Config and Config.Debug then
+                    print("^3[vein-clothing] Default outfit received from server. Applying...^7")
+                    
+                    -- Print outfit details in debug mode
+                    for category, itemData in pairs(outfit) do
+                        print("  " .. category .. ": " .. (itemData.name or "unknown"))
+                    end
+                end
+                
+                -- Safe attempt to wear the outfit
+                local wearSuccess = pcall(function()
+                    WearOutfit(outfit)
+                end)
+                
+                if wearSuccess then
+                    -- Successfully applied outfit
+                    outfitLoaded = true
+                    
+                    -- Only show notification if Config and QBCore are valid
+                    if Config and Config.Notifications and Config.Notifications.Enable then
+                        -- Use pcall to safely show notification
+                        pcall(function()
+                            QBCore.Functions.Notify(Lang:t('info.default_outfit_loaded'), 'success', Config.Notifications.Duration)
+                        end)
+                    end
+                    
+                    if Config and Config.Debug then
+                        print("^2[vein-clothing] Default outfit applied successfully^7")
+                    end
+                else
+                    print("^1[ERROR] Failed to apply default outfit^7")
+                end
+            else
+                if Config and Config.Debug then
+                    print("^3[vein-clothing] No default outfit found or received invalid outfit data^7")
+                end
             end
         end)
+        
+        -- Wait for the callback to complete
+        local callbackWait = 0
+        while not outfitLoaded and callbackWait < 50 do
+            Wait(100)
+            callbackWait = callbackWait + 1
+        end
+        
+        if not outfitLoaded and Config and Config.Debug then
+            print("^3[vein-clothing] No outfit was loaded after waiting " .. callbackWait * 100 .. "ms^7")
+        end
     end)
+    
+    return true
 end
 
 -- Create store blips on the map
@@ -929,6 +1217,12 @@ function LoadStores()
     -- Debug log
     if Config.Debug then
         print("^3[vein-clothing] Loading stores...^7")
+    end
+    
+    -- Check if Config is loaded
+    if not Config then
+        print("^1[ERROR] Config not found. Make sure config.lua is loaded before client/main.lua^7")
+        return false
     end
     
     -- Check if Config.Stores exists
@@ -944,20 +1238,27 @@ function LoadStores()
     end
     
     -- Clear existing NPCs
-    for _, npc in pairs(storeNPCs) do
-        if DoesEntityExist(npc.handle) then
-            DeleteEntity(npc.handle)
+    if storeNPCs then
+        for _, npc in pairs(storeNPCs) do
+            if DoesEntityExist(npc.handle) then
+                DeleteEntity(npc.handle)
+            end
         end
     end
-    storeNPCs = {}
+    storeNPCs = storeNPCs or {}
     
     -- Clear existing zones
-    for _, zone in pairs(storeZones) do
-        if zone and zone.destroy then
-            zone:destroy()
+    if storeZones then
+        for _, zone in pairs(storeZones) do
+            if zone and zone.destroy then
+                zone:destroy()
+            end
         end
     end
-    storeZones = {}
+    storeZones = storeZones or {}
+    
+    local storesCount = 0
+    local npcCount = 0
     
     -- Create new blips and NPCs
     for storeType, storeData in pairs(Config.Stores) do
@@ -972,6 +1273,14 @@ function LoadStores()
         end
         
         for i, location in ipairs(storeData.locations) do
+            storesCount = storesCount + 1
+            
+            -- Verify location data
+            if not location or not location.x or not location.y or not location.z then
+                print("^1[ERROR] Invalid location data for " .. storeType .. " at index " .. i .. "^7")
+                goto continue_location
+            end
+            
             -- Create blip
             local blip = AddBlipForCoord(location.x, location.y, location.z)
             SetBlipSprite(blip, storeData.blip and storeData.blip.sprite or 73)
@@ -991,9 +1300,12 @@ function LoadStores()
                 print("^3[vein-clothing] Attempting to load model: " .. modelName .. " (Hash: " .. modelHash .. ")^7")
             end
             
+            -- Request model with proper error handling
             RequestModel(modelHash)
             
             local timeout = 0
+            local modelLoaded = false
+            
             -- Wait for model to load with timeout
             while not HasModelLoaded(modelHash) and timeout < 30 do
                 Wait(100)
@@ -1003,26 +1315,69 @@ function LoadStores()
                 end
             end
             
-            if HasModelLoaded(modelHash) then
-                if Config.Debug then
-                    print("^3[vein-clothing] Model loaded successfully: " .. modelName .. "^7")
+            modelLoaded = HasModelLoaded(modelHash)
+            
+            if not modelLoaded then
+                print("^1[ERROR] Failed to load model " .. modelName .. " after 30 attempts. Using fallback model.^7")
+                
+                -- Try fallback model
+                modelName = "a_f_y_business_01"  -- Fallback to a common model
+                modelHash = GetHashKey(modelName)
+                RequestModel(modelHash)
+                
+                timeout = 0
+                while not HasModelLoaded(modelHash) and timeout < 30 do
+                    Wait(100)
+                    timeout = timeout + 1
                 end
                 
-                local npc = CreatePed(4, modelHash, location.x, location.y, location.z - 1.0, location.w, false, true)
+                modelLoaded = HasModelLoaded(modelHash)
                 
-                if DoesEntityExist(npc) then
-                    if Config.Debug then
-                        print("^3[vein-clothing] NPC created successfully at location: " .. 
-                            location.x .. ", " .. location.y .. ", " .. location.z .. "^7")
-                    end
-                    
+                if not modelLoaded then
+                    print("^1[ERROR] Failed to load fallback model. Skipping NPC creation for this store.^7")
+                    goto continue_location
+                end
+            end
+            
+            if Config.Debug then
+                print("^3[vein-clothing] Model loaded successfully: " .. modelName .. "^7")
+            end
+            
+            -- Safety check for position
+            local safeX, safeY, safeZ = location.x, location.y, location.z - 1.0
+            local safeW = location.w or 0.0
+            
+            local npc = CreatePed(4, modelHash, safeX, safeY, safeZ, safeW, false, true)
+            
+            if DoesEntityExist(npc) then
+                npcCount = npcCount + 1
+                
+                if Config.Debug then
+                    print("^3[vein-clothing] NPC created successfully at location: " .. 
+                        safeX .. ", " .. safeY .. ", " .. safeZ .. "^7")
+                end
+                
+                -- Make sure the NPC is properly configured
+                if not IsEntityDead(npc) then
                     FreezeEntityPosition(npc, true)
                     SetEntityInvincible(npc, true)
                     SetBlockingOfNonTemporaryEvents(npc, true)
                     
-                    -- Apply animation
-                    local scenario = storeData.clerk and storeData.clerk.scenario or "WORLD_HUMAN_STAND_IMPATIENT"
-                    TaskStartScenarioInPlace(npc, scenario, 0, true)
+                    -- Apply animation with a safe default
+                    local scenario = "WORLD_HUMAN_STAND_IMPATIENT"
+                    if storeData.clerk and storeData.clerk.scenario then
+                        scenario = storeData.clerk.scenario
+                    end
+                    
+                    -- Use pcall to handle any scenario errors
+                    local scenarioSuccess = pcall(function()
+                        TaskStartScenarioInPlace(npc, scenario, 0, true)
+                    end)
+                    
+                    if not scenarioSuccess and Config.Debug then
+                        print("^3[WARNING] Failed to start scenario " .. scenario .. " for NPC. Using default.^7")
+                        TaskStartScenarioInPlace(npc, "WORLD_HUMAN_STAND_IMPATIENT", 0, true)
+                    end
                     
                     -- Store reference to NPC
                     table.insert(storeNPCs, {
@@ -1039,72 +1394,78 @@ function LoadStores()
                         end
                         
                         if GetResourceState('qb-target') ~= 'missing' then
-                            exports['qb-target']:AddTargetEntity(npc, {
-                                options = {
-                                    {
-                                        type = "client",
-                                        event = "vein-clothing:client:openStore",
-                                        icon = "fas fa-tshirt",
-                                        label = "Browse " .. (storeData.label or "Clothing Store"),
-                                        args = {
-                                            store = storeType
+                            -- Use pcall to avoid crashing if target export fails
+                            pcall(function()
+                                exports['qb-target']:AddTargetEntity(npc, {
+                                    options = {
+                                        {
+                                            type = "client",
+                                            event = "vein-clothing:client:openStore",
+                                            icon = "fas fa-tshirt",
+                                            label = "Browse " .. (storeData.label or "Clothing Store"),
+                                            args = {
+                                                store = storeType
+                                            }
                                         }
-                                    }
-                                },
-                                distance = Config.PlayerInteraction and Config.PlayerInteraction.MaxDistance or 3.0
-                            })
+                                    },
+                                    distance = Config.PlayerInteraction and Config.PlayerInteraction.MaxDistance or 3.0
+                                })
+                            end)
                         else
-                            print("^3[WARNING] qb-target not found, disabling targeting for NPCs^7")
+                            print("^3[WARNING] qb-target not found, disabling targeting for store clerks^7")
                         end
                     else
-                        -- Create interaction zone if not using target
+                        -- Create interaction zone if PolyZone is available
                         if CircleZone then
-                            local zone = CircleZone:Create(
-                                vector3(location.x, location.y, location.z), 
-                                3.0, 
-                                {
-                                    name = storeType .. "_" .. i,
-                                    debugPoly = Config.Debug,
-                                    useZ = true
-                                }
-                            )
-                            
-                            zone:onPlayerInOut(function(isPointInside)
-                                if isPointInside then
-                                    isInClothingStore = true
-                                    currentStore = storeType
-                                    QBCore.Functions.Notify("Press [E] to browse " .. (storeData.label or "Clothing Store"), 'primary', 5000)
-                                else
-                                    if currentStore == storeType then
-                                        isInClothingStore = false
+                            -- Use pcall to avoid crashing if zone creation fails
+                            pcall(function() 
+                                local zone = CircleZone.Create(
+                                    vector3(location.x, location.y, location.z), 
+                                    2.0, 
+                                    {
+                                        name = storeType .. "_" .. i,
+                                        debugPoly = Config.Debug,
+                                        useZ = true
+                                    }
+                                )
+                                
+                                zone:onPlayerInOut(function(isPointInside)
+                                    if isPointInside then
+                                        currentStore = storeType
+                                        inStore = true
+                                        QBCore.Functions.Notify("Press [E] to browse " .. (storeData.label or "Clothing Store"), "primary", 5000)
+                                    else
+                                        inStore = false
                                         currentStore = nil
                                     end
-                                end
+                                end)
+                                
+                                table.insert(storeZones, zone)
                             end)
-                            
-                            table.insert(storeZones, zone)
                         end
                     end
                 else
                     if Config.Debug then
-                        print("^1[vein-clothing] ERROR: Failed to create NPC for model: " .. modelName .. "^7")
+                        print("^1[ERROR] NPC was created but is dead. Deleting entity.^7")
                     end
+                    DeleteEntity(npc)
                 end
             else
-                if Config.Debug then
-                    print("^1[vein-clothing] ERROR: Failed to load model: " .. modelName .. "^7")
-                end
+                print("^1[ERROR] Failed to create NPC at location " .. 
+                    safeX .. ", " .. safeY .. ", " .. safeZ .. "^7")
             end
             
-            -- Clean up model
+            -- Free model regardless of success
             SetModelAsNoLongerNeeded(modelHash)
+            
+            ::continue_location::
         end
         
         ::continue::
     end
     
     if Config.Debug then
-        print("^3[vein-clothing] Successfully loaded " .. #storeNPCs .. " store NPCs^7")
+        print("^3[vein-clothing] Successfully loaded " .. npcCount .. " store NPCs out of " .. storesCount .. " configured locations^7")
     end
     
     return true
