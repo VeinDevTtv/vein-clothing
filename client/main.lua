@@ -372,7 +372,7 @@ function LoadStores()
                         
                         local zoneSuccess, zone = pcall(function()
                             return CircleZone.Create(
-                                vector3(location.x, location.y, location.z), 
+                                SafeVector3(location.x, location.y, location.z), 
                                 2.0, 
                                 {
                                     name = "store_" .. storeType .. "_" .. i,
@@ -520,7 +520,7 @@ function LoadLaundromats()
         elseif CircleZone then
             -- Create interaction zone
             local zone = CircleZone.Create(
-                vector3(location.coords.x, location.coords.y, location.coords.z), 
+                SafeVector3(location.coords.x, location.coords.y, location.coords.z), 
                 2.0, 
                 {
                     name = "laundromat_" .. i,
@@ -648,7 +648,7 @@ function LoadTailors()
         elseif CircleZone then
             -- Create interaction zone
             local zone = CircleZone.Create(
-                vector3(location.coords.x, location.coords.y, location.coords.z), 
+                SafeVector3(location.coords.x, location.coords.y, location.coords.z), 
                 2.0, 
                 {
                     name = "tailor_" .. i,
@@ -1351,9 +1351,21 @@ RegisterNUICallback('closeUI', function(data, cb)
     -- Reset UI state
     isInClothingStore = false
     inWardrobe = false
+    currentStore = nil
     
     -- Release focus
     SetNuiFocus(false, false)
+    
+    -- Make sure to reset the ped rotation
+    local playerPed = PlayerPedId()
+    if playerPed and DoesEntityExist(playerPed) then
+        SetEntityHeading(playerPed, lastHeading or 0.0)
+    end
+    
+    -- Fully hide the UI
+    SendNUIMessage({
+        action = "hide"
+    })
     
     print("^2[vein-clothing] UI closed successfully^7")
     cb({success = true})
@@ -2051,3 +2063,111 @@ function DebugPrint(message)
         print("^2[vein-clothing] DEBUG: " .. message .. "^7")
     end
 end 
+
+-- Make sure UI is properly closed when resource stops
+AddEventHandler('onResourceStop', function(resourceName)
+    if (GetCurrentResourceName() ~= resourceName) then return end
+    
+    -- Ensure NUI focus is released and UI is hidden
+    if isInClothingStore or inWardrobe then
+        SetNuiFocus(false, false)
+        
+        -- Reset any state variables
+        isInClothingStore = false
+        inWardrobe = false
+        currentStore = nil
+        
+        -- Hide UI elements
+        SendNUIMessage({
+            action = "hide"
+        })
+        
+        print("^3[vein-clothing] Resource stopping, UI forcibly closed^7")
+    end
+end)
+
+-- Initialize UI when resource starts
+AddEventHandler('onResourceStart', function(resourceName)
+    if (GetCurrentResourceName() ~= resourceName) then return end
+    
+    -- Ensure the UI is closed and reset when resource starts
+    -- This helps prevent the UI from being stuck open if the resource was stopped while UI was active
+    Citizen.Wait(500)
+    SetNuiFocus(false, false)
+    isInClothingStore = false
+    inWardrobe = false
+    currentStore = nil
+    
+    -- Hide UI elements
+    SendNUIMessage({
+        action = "hide"
+    })
+    
+    -- Safely initialize critical systems
+    Citizen.Wait(1000) -- Wait for QBCore to fully initialize
+    
+    -- Make sure the vector3 function is available and working
+    -- This helps prevent the "Argument at index 0 was null" error
+    local testSuccess, testResult = pcall(function()
+        return vector3(0.0, 0.0, 0.0)
+    end)
+    
+    if not testSuccess then
+        print("^1[ERROR] Critical error: vector3 function is not working properly. Error: " .. tostring(testResult) .. "^7")
+    else
+        print("^2[vein-clothing] Vector3 function working properly^7")
+    end
+    
+    -- Initialize the UI state
+    SendNUIMessage({
+        action = "initialize",
+        debug = Config.Debug or false
+    })
+    
+    print("^2[vein-clothing] Resource started, UI state reset^7")
+end)
+
+-- Helper function to safely create vector3 objects
+function SafeVector3(x, y, z)
+    if not x or not y or not z then
+        print("^1[ERROR] Attempt to create vector3 with nil values. Using fallback coordinates.^7")
+        return vector3(0.0, 0.0, 0.0)
+    end
+    
+    -- Convert to numbers in case they're strings
+    local nx = tonumber(x) or 0.0
+    local ny = tonumber(y) or 0.0
+    local nz = tonumber(z) or 0.0
+    
+    -- Safely create vector3
+    local success, result = pcall(function()
+        return vector3(nx, ny, nz)
+    end)
+    
+    if not success then
+        print("^1[ERROR] Failed to create vector3: " .. tostring(result) .. ". Using fallback.^7")
+        return vector3(0.0, 0.0, 0.0)
+    end
+    
+    return result
+end
+
+-- Helper function to get the player's position safely
+function GetSafePlayerPosition()
+    local playerPed = SafePlayerPedId()
+    if not playerPed or playerPed == 0 then
+        print("^1[ERROR] Invalid player ped in GetSafePlayerPosition^7")
+        return vector3(0.0, 0.0, 0.0)
+    end
+    
+    local success, result = pcall(function()
+        return GetEntityCoords(playerPed)
+    end)
+    
+    if not success or not result then
+        print("^1[ERROR] Failed to get player coords: " .. tostring(result) .. ". Using fallback.^7")
+        return vector3(0.0, 0.0, 0.0)
+    end
+    
+    return result
+end

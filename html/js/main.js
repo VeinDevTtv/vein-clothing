@@ -561,6 +561,22 @@ const app = new Vue({
                         this.playerMoney = data.playerMoney || 0;
                         this.storeItems = data.inventory || [];
                         this.currentView = 'store';
+                    } else if (data.action === "hide") {
+                        this.visible = false;
+                        this.showModal = false;
+                        this.modalType = '';
+                        this.currentView = 'store';
+                        console.log('UI hidden by client request');
+                    } else if (data.action === "initialize") {
+                        // Initialize default UI state
+                        this.visible = false;
+                        this.inStore = false;
+                        this.inLaundromat = false;
+                        this.inTailor = false;
+                        this.currentStore = null;
+                        this.currentView = 'store';
+                        this.debug = data.debug || false;
+                        console.log('UI initialized with debug mode:', this.debug);
                     }
                     break;
                     
