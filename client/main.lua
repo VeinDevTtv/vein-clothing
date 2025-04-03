@@ -6,6 +6,12 @@ local currentOutfit = {}
 local inWardrobe = false
 local clothingPeds = {}
 
+-- Ensure Config exists
+if not Config then
+    Config = {}
+    print("^1[ERROR] Config not found. Make sure config.lua is loaded before this file.^7")
+end
+
 -- Create mock functions for CircleZone if PolyZone is not available
 local mockDestroy = function() end
 local mockOnPlayerInOut = function(cb) end
@@ -58,11 +64,17 @@ local clothingComponents = {
 }
 
 -- Add this near the top of the file, after QBCore initialization
-local ClothingConfig = exports['vein-clothing']:GetClothingConfig()
+-- local ClothingConfig = exports['vein-clothing']:GetClothingConfig()
+local ClothingConfig = {}
 
 -- Function to get clothing config for an item
 function GetClothingConfig(itemName)
-    return ClothingConfig[itemName] or nil
+    -- Use QBCore.Shared.Items directly instead of a possibly circular reference
+    local item = QBCore.Shared.Items[itemName]
+    if item and item.client then
+        return item.client
+    end
+    return nil
 end
 
 -- Add this safety function near the top of the file
@@ -479,6 +491,102 @@ RegisterNUICallback('closeUI', function(data, cb)
     cb({success = true})
 end)
 
+-- Function to handle inventory interactions based on config
+function HandleInventory(action, ...)
+    local args = {...}
+    local inventoryType = Config.Inventory.Type
+    
+    if action == 'notification' then
+        local item, type, qty = args[1], args[2], args[3] or 1
+        if inventoryType == 'qb-inventory' then
+            TriggerEvent('inventory:client:ItemBox', QBCore.Shared.Items[item], type, qty)
+        elseif inventoryType == 'ox_inventory' then
+            local title = type == 'add' and 'Item Added' or 'Item Removed'
+            exports.ox_inventory:notify({
+                title = title,
+                description = QBCore.Shared.Items[item].label .. ' x' .. qty,
+                type = type == 'add' and 'success' or 'error'
+            })
+        elseif inventoryType == 'custom' then
+            -- Custom inventory notification
+            TriggerEvent(Config.Inventory.Custom.TriggerEvent, item, type, qty)
+        end
+    elseif action == 'hasItem' then
+        local item, amount = args[1], args[2] or 1
+        if inventoryType == 'qb-inventory' then
+            return QBCore.Functions.HasItem(item, amount)
+        elseif inventoryType == 'ox_inventory' then
+            return exports.ox_inventory:GetItemCount(item) >= amount
+        elseif inventoryType == 'custom' then
+            -- Custom inventory check
+            return exports[Config.Inventory.Custom.ResourceName][Config.Inventory.Custom.HasItem](item, amount)
+        end
+    end
+end
+
+-- Function to show notifications based on config
+function ShowNotification(message, type, duration)
+    local notifType = Config.Notifications.Type
+    duration = duration or Config.Notifications.Duration
+    
+    if not Config.Notifications.Enable then return end
+    
+    if notifType == 'qb' then
+        QBCore.Functions.Notify(message, type, duration)
+    elseif notifType == 'ox' then
+        lib.notify({
+            title = type == 'success' and 'Success' or (type == 'error' and 'Error' or 'Info'),
+            description = message,
+            type = type,
+            position = Config.Notifications.Position,
+            duration = duration
+        })
+    elseif notifType == 'custom' then
+        -- Add support for custom notification systems
+        TriggerEvent('your-custom-notification', message, type, duration)
+    end
+end
+
+-- Helper function to get component ID from category
+function GetComponentIdFromCategory(category)
+    local componentMap = {
+        ['mask'] = 1,
+        ['hair'] = 2,
+        ['torso'] = 3,
+        ['legs'] = 4,
+        ['bag'] = 5,
+        ['shoes'] = 6,
+        ['accessory'] = 7,
+        ['undershirt'] = 8,
+        ['kevlar'] = 9,
+        ['badge'] = 10,
+        ['torso2'] = 11
+    }
+    return componentMap[category]
+end
+
+-- Helper function to get prop ID from category
+function GetPropIdFromCategory(category)
+    local propMap = {
+        ['hat'] = 0,
+        ['glasses'] = 1,
+        ['ear'] = 2,
+        ['watch'] = 6,
+        ['bracelet'] = 7
+    }
+    return propMap[category]
+end
+
+-- Function to check if addon clothing is loaded
+function HasAddonClothingLoaded(model)
+    return HasModelLoaded(model)
+end
+
+-- Function to check if addon prop is loaded
+function HasPropLoaded(model)
+    return HasModelLoaded(model)
+end
+
 -- Function to handle any type of clothing item
 local function HandleClothingItem(itemData)
     if not itemData then return false end
@@ -544,102 +652,6 @@ local function HandleClothingItem(itemData)
     end
     
     return true
-end
-
--- Helper function to get component ID from category
-function GetComponentIdFromCategory(category)
-    local componentMap = {
-        ['mask'] = 1,
-        ['hair'] = 2,
-        ['torso'] = 3,
-        ['legs'] = 4,
-        ['bag'] = 5,
-        ['shoes'] = 6,
-        ['accessory'] = 7,
-        ['undershirt'] = 8,
-        ['kevlar'] = 9,
-        ['badge'] = 10,
-        ['torso2'] = 11
-    }
-    return componentMap[category]
-end
-
--- Helper function to get prop ID from category
-function GetPropIdFromCategory(category)
-    local propMap = {
-        ['hat'] = 0,
-        ['glasses'] = 1,
-        ['ear'] = 2,
-        ['watch'] = 6,
-        ['bracelet'] = 7
-    }
-    return propMap[category]
-end
-
--- Function to check if addon clothing is loaded
-function HasAddonClothingLoaded(model)
-    return HasModelLoaded(model)
-end
-
--- Function to check if addon prop is loaded
-function HasPropLoaded(model)
-    return HasModelLoaded(model)
-end
-
--- Function to handle inventory interactions based on config
-function HandleInventory(action, ...)
-    local args = {...}
-    local inventoryType = Config.Inventory.Type
-    
-    if action == 'notification' then
-        local item, type, qty = args[1], args[2], args[3] or 1
-        if inventoryType == 'qb-inventory' then
-            TriggerEvent('inventory:client:ItemBox', QBCore.Shared.Items[item], type, qty)
-        elseif inventoryType == 'ox_inventory' then
-            local title = type == 'add' and 'Item Added' or 'Item Removed'
-            exports.ox_inventory:notify({
-                title = title,
-                description = QBCore.Shared.Items[item].label .. ' x' .. qty,
-                type = type == 'add' and 'success' or 'error'
-            })
-        elseif inventoryType == 'custom' then
-            -- Custom inventory notification
-            TriggerEvent(Config.Inventory.Custom.TriggerEvent, item, type, qty)
-        end
-    elseif action == 'hasItem' then
-        local item, amount = args[1], args[2] or 1
-        if inventoryType == 'qb-inventory' then
-            return QBCore.Functions.HasItem(item, amount)
-        elseif inventoryType == 'ox_inventory' then
-            return exports.ox_inventory:GetItemCount(item) >= amount
-        elseif inventoryType == 'custom' then
-            -- Custom inventory check
-            return exports[Config.Inventory.Custom.ResourceName][Config.Inventory.Custom.HasItem](item, amount)
-        end
-    end
-end
-
--- Function to show notifications based on config
-function ShowNotification(message, type, duration)
-    local notifType = Config.Notifications.Type
-    duration = duration or Config.Notifications.Duration
-    
-    if not Config.Notifications.Enable then return end
-    
-    if notifType == 'qb' then
-        QBCore.Functions.Notify(message, type, duration)
-    elseif notifType == 'ox' then
-        lib.notify({
-            title = type == 'success' and 'Success' or (type == 'error' and 'Error' or 'Info'),
-            description = message,
-            type = type,
-            position = Config.Notifications.Position,
-            duration = duration
-        })
-    elseif notifType == 'custom' then
-        -- Add support for custom notification systems
-        TriggerEvent('your-custom-notification', message, type, duration)
-    end
 end
 
 -- Update existing code to use the new functions
@@ -859,6 +871,11 @@ end, false)
 function Initialize()
     PlayerData = QBCore.Functions.GetPlayerData()
     
+    -- Initialize ClothingConfig locally to prevent circular references
+    if next(ClothingConfig) == nil then
+        ClothingConfig = Config.Items or {} -- Use built-in config if available
+    end
+    
     -- Debug config message
     if Config.Debug then
         print("^2[vein-clothing] Initializing with config: ^7")
@@ -873,7 +890,7 @@ function Initialize()
     
     -- Check if qb-target is available when UseTarget is enabled
     if Config.UseTarget then
-        if not exports['qb-target'] then
+        if GetResourceState('qb-target') == 'missing' then
             print("^1[vein-clothing] ERROR: Config.UseTarget is enabled but qb-target resource is not available^7")
             print("^1[vein-clothing] Please ensure qb-target is started before this resource^7")
             Config.UseTarget = false
@@ -906,7 +923,7 @@ function Initialize()
     
     -- Export the config for other resources to use
     exports('GetClothingConfig', function()
-        return Config
+        return Config.Items or Config -- Return the clothing configuration
     end)
     
     if Config.Debug then
@@ -937,6 +954,12 @@ function LoadStores()
         print("^3[vein-clothing] Loading stores...^7")
     end
     
+    -- Check if Config.Stores exists
+    if not Config.Stores then
+        print("^1[ERROR] Config.Stores not found. Make sure config.lua is properly configured.^7")
+        return
+    end
+    
     -- Remove existing blips first
     if currentStoreBlip then
         RemoveBlip(currentStoreBlip)
@@ -965,20 +988,26 @@ function LoadStores()
             print("^3[vein-clothing] Setting up store: " .. storeType .. "^7")
         end
         
+        -- Skip if store data is invalid
+        if not storeData or not storeData.locations then
+            print("^1[ERROR] Invalid store data for " .. storeType .. "^7")
+            goto continue
+        end
+        
         for i, location in ipairs(storeData.locations) do
             -- Create blip
             local blip = AddBlipForCoord(location.x, location.y, location.z)
-            SetBlipSprite(blip, storeData.blip.sprite)
+            SetBlipSprite(blip, storeData.blip and storeData.blip.sprite or 73)
             SetBlipDisplay(blip, 4)
-            SetBlipScale(blip, storeData.blip.scale)
-            SetBlipColour(blip, storeData.blip.color)
+            SetBlipScale(blip, storeData.blip and storeData.blip.scale or 0.7)
+            SetBlipColour(blip, storeData.blip and storeData.blip.color or 0)
             SetBlipAsShortRange(blip, true)
             BeginTextCommandSetBlipName("STRING")
-            AddTextComponentString(storeData.label)
+            AddTextComponentString(storeData.label or "Clothing Store")
             EndTextCommandSetBlipName(blip)
             
             -- Create store clerk NPC
-            local modelName = storeData.clerk.model
+            local modelName = storeData.clerk and storeData.clerk.model or "a_f_y_business_01"
             local modelHash = GetHashKey(modelName)
             
             if Config.Debug then
@@ -1015,7 +1044,8 @@ function LoadStores()
                     SetBlockingOfNonTemporaryEvents(npc, true)
                     
                     -- Apply animation
-                    TaskStartScenarioInPlace(npc, storeData.clerk.scenario, 0, true)
+                    local scenario = storeData.clerk and storeData.clerk.scenario or "WORLD_HUMAN_STAND_IMPATIENT"
+                    TaskStartScenarioInPlace(npc, scenario, 0, true)
                     
                     -- Store reference to NPC
                     table.insert(storeNPCs, {
@@ -1031,20 +1061,24 @@ function LoadStores()
                             print("^3[vein-clothing] Adding qb-target to clerk NPC^7")
                         end
                         
-                        exports['qb-target']:AddTargetEntity(npc, {
-                            options = {
-                                {
-                                    type = "client",
-                                    event = "vein-clothing:client:openStore",
-                                    icon = "fas fa-tshirt",
-                                    label = "Browse " .. storeData.label,
-                                    args = {
-                                        store = storeType
+                        if GetResourceState('qb-target') ~= 'missing' then
+                            exports['qb-target']:AddTargetEntity(npc, {
+                                options = {
+                                    {
+                                        type = "client",
+                                        event = "vein-clothing:client:openStore",
+                                        icon = "fas fa-tshirt",
+                                        label = "Browse " .. (storeData.label or "Clothing Store"),
+                                        args = {
+                                            store = storeType
+                                        }
                                     }
-                                }
-                            },
-                            distance = Config.PlayerInteraction.MaxDistance
-                        })
+                                },
+                                distance = Config.PlayerInteraction and Config.PlayerInteraction.MaxDistance or 3.0
+                            })
+                        else
+                            print("^3[WARNING] qb-target not found, disabling targeting for NPCs^7")
+                        end
                     else
                         -- Create interaction zone if not using target
                         if CircleZone then
@@ -1062,7 +1096,7 @@ function LoadStores()
                                 if isPointInside then
                                     isInClothingStore = true
                                     currentStore = storeType
-                                    QBCore.Functions.Notify("Press [E] to browse " .. storeData.label, 'primary', 5000)
+                                    QBCore.Functions.Notify("Press [E] to browse " .. (storeData.label or "Clothing Store"), 'primary', 5000)
                                 else
                                     if currentStore == storeType then
                                         isInClothingStore = false
@@ -1088,6 +1122,8 @@ function LoadStores()
             -- Clean up model
             SetModelAsNoLongerNeeded(modelHash)
         end
+        
+        ::continue::
     end
     
     if Config.Debug then
@@ -1101,26 +1137,53 @@ function LoadLaundromats()
         print("^3[vein-clothing] Loading laundromats...^7")
     end
     
+    -- Check if Config.Laundromats exists
+    if not Config.Laundromats then
+        print("^1[ERROR] Config.Laundromats not found. Make sure config.lua is properly configured.^7")
+        return
+    end
+    
     for i, location in ipairs(Config.Laundromats) do
+        -- Skip if location data is invalid
+        if not location or not location.coords then
+            print("^1[ERROR] Invalid laundromat data at index " .. i .. "^7")
+            goto continue
+        end
+        
         -- Create blip
         local blip = AddBlipForCoord(location.coords.x, location.coords.y, location.coords.z)
-        SetBlipSprite(blip, location.blip.sprite)
+        local blipData = location.blip or {}
+        SetBlipSprite(blip, blipData.sprite or 73)
         SetBlipDisplay(blip, 4)
-        SetBlipScale(blip, 0.7)
-        SetBlipColour(blip, 3)
+        SetBlipScale(blip, blipData.scale or 0.7)
+        SetBlipColour(blip, blipData.color or 3)
         SetBlipAsShortRange(blip, true)
         BeginTextCommandSetBlipName("STRING")
-        AddTextComponentString("Laundromat")
+        AddTextComponentString(blipData.label or "Laundromat")
         EndTextCommandSetBlipName(blip)
         
         -- Create laundromat NPC
         local model = GetHashKey("s_f_y_shop_mid")
         RequestModel(model)
-        while not HasModelLoaded(model) do
-            Wait(1)
+        
+        local timeout = 0
+        while not HasModelLoaded(model) and timeout < 50 do
+            Wait(100)
+            timeout = timeout + 1
         end
         
-        local npc = CreatePed(4, model, location.coords.x, location.coords.y, location.coords.z - 1.0, location.coords.w, false, true)
+        if not HasModelLoaded(model) then
+            print("^1[ERROR] Failed to load model for laundromat at index " .. i .. "^7")
+            goto continue
+        end
+        
+        local npc = CreatePed(4, model, location.coords.x, location.coords.y, location.coords.z - 1.0, location.coords.w or 0.0, false, true)
+        
+        if not DoesEntityExist(npc) then
+            print("^1[ERROR] Failed to create ped for laundromat at index " .. i .. "^7")
+            goto continue
+        end
+        
         FreezeEntityPosition(npc, true)
         SetEntityInvincible(npc, true)
         SetBlockingOfNonTemporaryEvents(npc, true)
@@ -1135,17 +1198,21 @@ function LoadLaundromats()
         
         -- Add target interaction
         if Config.UseTarget then
-            exports['qb-target']:AddTargetEntity(npc, {
-                options = {
-                    {
-                        type = "client",
-                        event = "vein-clothing:client:openLaundromat",
-                        icon = "fas fa-soap",
-                        label = "Use Laundromat"
-                    }
-                },
-                distance = Config.PlayerInteraction.MaxDistance
-            })
+            if GetResourceState('qb-target') ~= 'missing' then
+                exports['qb-target']:AddTargetEntity(npc, {
+                    options = {
+                        {
+                            type = "client",
+                            event = "vein-clothing:client:openLaundromat",
+                            icon = "fas fa-soap",
+                            label = "Use Laundromat"
+                        }
+                    },
+                    distance = Config.PlayerInteraction and Config.PlayerInteraction.MaxDistance or 3.0
+                })
+            else
+                print("^3[WARNING] qb-target not found, disabling targeting for laundromat NPCs^7")
+            end
         else
             -- Create interaction zone
             if CircleZone then
@@ -1173,10 +1240,18 @@ function LoadLaundromats()
         end
         
         SetModelAsNoLongerNeeded(model)
+        
+        ::continue::
     end
     
     if Config.Debug then
-        print("^3[vein-clothing] Successfully loaded " .. #Config.Laundromats .. " laundromats^7")
+        local count = 0
+        for _, npc in pairs(storeNPCs) do
+            if npc.type == "laundromat" then
+                count = count + 1
+            end
+        end
+        print("^3[vein-clothing] Successfully loaded " .. count .. " laundromats^7")
     end
 end
 
@@ -1186,26 +1261,53 @@ function LoadTailors()
         print("^3[vein-clothing] Loading tailors...^7")
     end
     
+    -- Check if Config.Tailors exists
+    if not Config.Tailors then
+        print("^1[ERROR] Config.Tailors not found. Make sure config.lua is properly configured.^7")
+        return
+    end
+    
     for i, location in ipairs(Config.Tailors) do
+        -- Skip if location data is invalid
+        if not location or not location.coords then
+            print("^1[ERROR] Invalid tailor data at index " .. i .. "^7")
+            goto continue
+        end
+        
         -- Create blip
         local blip = AddBlipForCoord(location.coords.x, location.coords.y, location.coords.z)
-        SetBlipSprite(blip, location.blip.sprite)
+        local blipData = location.blip or {}
+        SetBlipSprite(blip, blipData.sprite or 73)
         SetBlipDisplay(blip, 4)
-        SetBlipScale(blip, 0.7)
-        SetBlipColour(blip, 4)
+        SetBlipScale(blip, blipData.scale or 0.7)
+        SetBlipColour(blip, blipData.color or 4)
         SetBlipAsShortRange(blip, true)
         BeginTextCommandSetBlipName("STRING")
-        AddTextComponentString("Tailor Shop")
+        AddTextComponentString(blipData.label or "Tailor Shop")
         EndTextCommandSetBlipName(blip)
         
         -- Create tailor NPC
         local model = GetHashKey("s_m_m_tailor_01")
         RequestModel(model)
-        while not HasModelLoaded(model) do
-            Wait(1)
+        
+        local timeout = 0
+        while not HasModelLoaded(model) and timeout < 50 do
+            Wait(100)
+            timeout = timeout + 1
         end
         
-        local npc = CreatePed(4, model, location.coords.x, location.coords.y, location.coords.z - 1.0, location.coords.w, false, true)
+        if not HasModelLoaded(model) then
+            print("^1[ERROR] Failed to load model for tailor at index " .. i .. "^7")
+            goto continue
+        end
+        
+        local npc = CreatePed(4, model, location.coords.x, location.coords.y, location.coords.z - 1.0, location.coords.w or 0.0, false, true)
+        
+        if not DoesEntityExist(npc) then
+            print("^1[ERROR] Failed to create ped for tailor at index " .. i .. "^7")
+            goto continue
+        end
+        
         FreezeEntityPosition(npc, true)
         SetEntityInvincible(npc, true)
         SetBlockingOfNonTemporaryEvents(npc, true)
@@ -1220,17 +1322,21 @@ function LoadTailors()
         
         -- Add target interaction
         if Config.UseTarget then
-            exports['qb-target']:AddTargetEntity(npc, {
-                options = {
-                    {
-                        type = "client",
-                        event = "vein-clothing:client:openTailor",
-                        icon = "fas fa-cut",
-                        label = "Use Tailor Services"
-                    }
-                },
-                distance = Config.PlayerInteraction.MaxDistance
-            })
+            if GetResourceState('qb-target') ~= 'missing' then
+                exports['qb-target']:AddTargetEntity(npc, {
+                    options = {
+                        {
+                            type = "client",
+                            event = "vein-clothing:client:openTailor",
+                            icon = "fas fa-cut",
+                            label = "Use Tailor Services"
+                        }
+                    },
+                    distance = Config.PlayerInteraction and Config.PlayerInteraction.MaxDistance or 3.0
+                })
+            else
+                print("^3[WARNING] qb-target not found, disabling targeting for tailor NPCs^7")
+            end
         else
             -- Create interaction zone
             if CircleZone then
@@ -1258,10 +1364,18 @@ function LoadTailors()
         end
         
         SetModelAsNoLongerNeeded(model)
+        
+        ::continue::
     end
     
     if Config.Debug then
-        print("^3[vein-clothing] Successfully loaded " .. #Config.Tailors .. " tailors^7")
+        local count = 0
+        for _, npc in pairs(storeNPCs) do
+            if npc.type == "tailor" then
+                count = count + 1
+            end
+        end
+        print("^3[vein-clothing] Successfully loaded " .. count .. " tailors^7")
     end
 end
 
