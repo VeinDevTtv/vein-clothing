@@ -5,6 +5,8 @@ local isInsideStore = false
 local currentOutfit = {}
 local inWardrobe = false
 local clothingPeds = {}
+local storeNPCs = {}
+local storeZones = {}
 
 -- Ensure Config exists
 if not Config then
@@ -41,8 +43,6 @@ isPreviewing = false
 isInWardrobe = false
 isInLaundromat = false
 isInTailor = false
-storeNPCs = {}
-storeZones = {}
 previewCam = nil
 
 -- Item category to component ID mapping
@@ -164,90 +164,23 @@ function LoadClothingBlips()
     end
 end
 
--- Create store clerk peds
+-- DO NOT USE: This function is deprecated, use LoadStores() instead
+-- Keeping the function signature to avoid breaking existing code references
 function LoadPeds()
-    for storeName, storeData in pairs(Config.Stores) do
-        for _, location in ipairs(storeData.locations) do
-            local ped = nil
-            local modelHash = GetHashKey(storeData.clerk.model)
-            
-            -- Add better error handling for model loading
-            if not IsModelInCdimage(modelHash) then
-                print("^1ERROR: Model " .. storeData.clerk.model .. " is not valid for store " .. storeName .. "^7")
-                -- Try fallback model if available
-                modelHash = GetHashKey("a_f_y_business_01")
-                if not IsModelInCdimage(modelHash) then
-                    print("^1ERROR: Fallback model also invalid. Skipping NPC creation for " .. storeName .. "^7")
-                    goto continue
-                end
-                print("^3WARNING: Using fallback model for store " .. storeName .. "^7")
-            end
-            
-            RequestModel(modelHash)
-            
-            -- Add timeout for model loading
-            local timeout = 0
-            while not HasModelLoaded(modelHash) and timeout < 50 do
-                Wait(100)
-                timeout = timeout + 1
-            end
-            
-            if not HasModelLoaded(modelHash) then
-                print("^1ERROR: Failed to load model " .. storeData.clerk.model .. " for store " .. storeName .. " after timeout^7")
-                goto continue
-            end
-            
-            ped = CreatePed(4, modelHash, location.x, location.y, location.z - 1.0, location.w, false, true)
-            
-            if not DoesEntityExist(ped) then
-                print("^1ERROR: Failed to create ped for store " .. storeName .. "^7")
-                goto continue
-            end
-            
-            SetEntityHeading(ped, location.w)
-            FreezeEntityPosition(ped, true)
-            SetEntityInvincible(ped, true)
-            SetBlockingOfNonTemporaryEvents(ped, true)
-            
-            -- Set animation
-            TaskStartScenarioInPlace(ped, storeData.clerk.scenario, 0, true)
-            
-            table.insert(clothingPeds, ped)
-            
-            -- Target interaction if enabled and qb-target exists
-            if Config.UseTarget then
-                if GetResourceState('qb-target') ~= 'missing' then
-                    exports['qb-target']:AddTargetEntity(ped, {
-                        options = {
-                            {
-                                type = "client",
-                                event = "vein-clothing:client:openStore",
-                                icon = "fas fa-tshirt",
-                                label = "Browse " .. storeData.label,
-                                args = {
-                                    store = storeName
-                                }
-                            }
-                        },
-                        distance = Config.PlayerInteraction.MaxDistance
-                    })
-                else
-                    print("^3WARNING: qb-target not found, disabling targeting for NPCs^7")
-                end
-            end
-            
-            ::continue::
-        end
-    end
-    
-    print("^2INFO: Loaded " .. #clothingPeds .. " store clerk NPCs^7")
+    print("^3[vein-clothing] WARNING: LoadPeds() is deprecated. Using LoadStores() instead.^7")
+    return LoadStores()
 end
 
 -- Cleanup peds when resource stops
 function DestroyPeds()
-    for _, ped in ipairs(clothingPeds) do
-        DeletePed(ped)
+    for _, npc in pairs(storeNPCs) do
+        if DoesEntityExist(npc.handle) then
+            DeleteEntity(npc.handle)
+        end
     end
+    storeNPCs = {}
+    
+    -- For backwards compatibility
     clothingPeds = {}
 end
 
@@ -869,6 +802,17 @@ end, false)
 
 -- Initialize function (called on script start)
 function Initialize()
+    -- Wait for QBCore to be fully initialized
+    while not QBCore do
+        Wait(100)
+        QBCore = exports['qb-core']:GetCoreObject()
+    end
+    
+    -- Wait for PlayerData to be available
+    while not QBCore.Functions.GetPlayerData().citizenid do
+        Wait(100)
+    end
+    
     PlayerData = QBCore.Functions.GetPlayerData()
     
     -- Initialize ClothingConfig locally to prevent circular references
@@ -900,35 +844,40 @@ function Initialize()
         end
     end
     
-    -- Load various components in the correct order
+    -- Load various components in the correct order with proper error handling
     Citizen.CreateThread(function()
         -- Give the server a moment to initialize
         Citizen.Wait(1000)
         
         print("^3[vein-clothing] Loading stores...^7")
-        LoadStores()       -- This creates store clerks with qb-target
+        if not LoadStores() then
+            print("^1[vein-clothing] ERROR: Failed to load stores. Aborting initialization.^7")
+            return
+        end
         
         print("^3[vein-clothing] Loading laundromats...^7")
-        LoadLaundromats()
+        if not LoadLaundromats() then
+            print("^1[vein-clothing] ERROR: Failed to load laundromats. Continuing with partial initialization.^7")
+        end
         
         print("^3[vein-clothing] Loading tailors...^7")
-        LoadTailors()
+        if not LoadTailors() then
+            print("^1[vein-clothing] ERROR: Failed to load tailors. Continuing with partial initialization.^7")
+        end
         
         print("^3[vein-clothing] Loading player outfit...^7")
         LoadPlayerOutfit()
         
         print("^3[vein-clothing] Starting condition monitoring...^7")
         StartConditionMonitoring()
+        
+        print("^2[vein-clothing] Initialization complete!^7")
     end)
     
     -- Export the config for other resources to use
     exports('GetClothingConfig', function()
         return Config.Items or Config -- Return the clothing configuration
     end)
-    
-    if Config.Debug then
-        print("^2[vein-clothing] Initialization complete!^7")
-    end
 end
 
 -- Load player's saved outfit on spawn
@@ -957,7 +906,7 @@ function LoadStores()
     -- Check if Config.Stores exists
     if not Config.Stores then
         print("^1[ERROR] Config.Stores not found. Make sure config.lua is properly configured.^7")
-        return
+        return false
     end
     
     -- Remove existing blips first
@@ -1129,6 +1078,8 @@ function LoadStores()
     if Config.Debug then
         print("^3[vein-clothing] Successfully loaded " .. #storeNPCs .. " store NPCs^7")
     end
+    
+    return true
 end
 
 -- Load laundromat locations
@@ -1140,7 +1091,7 @@ function LoadLaundromats()
     -- Check if Config.Laundromats exists
     if not Config.Laundromats then
         print("^1[ERROR] Config.Laundromats not found. Make sure config.lua is properly configured.^7")
-        return
+        return false
     end
     
     for i, location in ipairs(Config.Laundromats) do
@@ -1253,6 +1204,8 @@ function LoadLaundromats()
         end
         print("^3[vein-clothing] Successfully loaded " .. count .. " laundromats^7")
     end
+    
+    return true
 end
 
 -- Load tailor shop locations
@@ -1264,7 +1217,7 @@ function LoadTailors()
     -- Check if Config.Tailors exists
     if not Config.Tailors then
         print("^1[ERROR] Config.Tailors not found. Make sure config.lua is properly configured.^7")
-        return
+        return false
     end
     
     for i, location in ipairs(Config.Tailors) do
@@ -1377,6 +1330,8 @@ function LoadTailors()
         end
         print("^3[vein-clothing] Successfully loaded " .. count .. " tailors^7")
     end
+    
+    return true
 end
 
 -- Monitor the condition of clothing items and provide notifications
@@ -1774,12 +1729,22 @@ exports('resetAppearance', ResetAppearance)
 -- Initialize everything when resource starts
 AddEventHandler('onClientResourceStart', function(resourceName)
     if GetCurrentResourceName() ~= resourceName then return end
-    Initialize()
+    
+    print("^2[vein-clothing] Resource started, beginning initialization...^7")
+    
+    -- Wait a moment for the config to be fully loaded
+    Citizen.CreateThread(function()
+        Citizen.Wait(500)
+        print("^2[vein-clothing] Starting initialization process...^7")
+        Initialize()
+    end)
 end)
 
 -- Clean up when resource stops
 AddEventHandler('onResourceStop', function(resourceName)
     if GetCurrentResourceName() ~= resourceName then return end
+    
+    print("^2[vein-clothing] Resource stopping, cleaning up...^7")
     
     -- Clean up NPCs
     for _, npc in pairs(storeNPCs) do
@@ -1790,7 +1755,9 @@ AddEventHandler('onResourceStop', function(resourceName)
     
     -- Clean up zones
     for _, zone in pairs(storeZones) do
-        zone:destroy()
+        if zone and zone.destroy then
+            zone:destroy()
+        end
     end
     
     -- Clean up camera
