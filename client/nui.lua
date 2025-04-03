@@ -297,8 +297,11 @@ RegisterNUICallback('rotatePreview', function(data, cb)
 end)
 
 function StartPreviewCam()
-    local playerPed = PlayerPedId()
+    local playerPed = SafePlayerPedId()
+    if not playerPed or playerPed == 0 then return end
+    
     local coords = GetEntityCoords(playerPed)
+    if not coords then return end
     
     -- Create camera
     previewCam = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
@@ -320,7 +323,7 @@ function StartPreviewCam()
 end
 
 function EndPreviewCam()
-    local playerPed = PlayerPedId()
+    local playerPed = SafePlayerPedId()
     
     -- Transition back to game camera
     RenderScriptCams(false, true, 1000, true, false)
@@ -331,8 +334,10 @@ function EndPreviewCam()
         previewCam = nil
     end
     
-    -- Enable player movement
-    FreezeEntityPosition(playerPed, false)
+    -- Enable player movement (only if we have a valid ped)
+    if playerPed and playerPed > 0 then
+        FreezeEntityPosition(playerPed, false)
+    end
 end
 
 -- Clean up on resource stop

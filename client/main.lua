@@ -1170,7 +1170,10 @@ end
 -- Start camera for clothing preview
 function StartPreviewCamera()
     local playerPed = SafePlayerPedId()
+    if not playerPed or playerPed == 0 then return end
+    
     local coords = GetEntityCoords(playerPed)
+    if not coords then return end
     
     -- Create a camera in front of the player
     previewCam = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
@@ -1188,31 +1191,48 @@ end
 
 -- Stop camera preview
 function StopPreviewCamera()
+    local playerPed = SafePlayerPedId()
+    
+    -- Transition back to game camera
+    RenderScriptCams(false, false, 0, true, false)
+    
+    -- Destroy camera
     if previewCam then
-        RenderScriptCams(false, false, 0, true, false)
         DestroyCam(previewCam, false)
         previewCam = nil
     end
     
-    -- Re-enable movement
-    DisableControlActions(false)
+    -- Enable movement (only if we have a valid ped)
+    if playerPed and playerPed > 0 then
+        DisableControlActions(false)
+    end
 end
 
 -- Helper function to disable control actions
 function DisableControlActions(disable)
-    CreateThread(function()
-        while disable do
-            DisableControlAction(0, 30, true) -- Movement
-            DisableControlAction(0, 31, true) -- Movement
-            DisableControlAction(0, 32, true) -- W
-            DisableControlAction(0, 33, true) -- S
-            DisableControlAction(0, 34, true) -- A
-            DisableControlAction(0, 35, true) -- D
-            DisableControlAction(0, 36, true) -- Crouch
-            DisableControlAction(0, 44, true) -- Cover
-            Wait(0)
-        end
-    end)
+    -- Store the state in a variable that can be accessed from the thread
+    previewControlsDisabled = disable
+    
+    if disable then
+        CreateThread(function()
+            while previewControlsDisabled do
+                DisableControlAction(0, 30, true) -- Movement
+                DisableControlAction(0, 31, true) -- Movement
+                DisableControlAction(0, 32, true) -- W
+                DisableControlAction(0, 33, true) -- S
+                DisableControlAction(0, 34, true) -- A
+                DisableControlAction(0, 35, true) -- D
+                DisableControlAction(0, 36, true) -- Crouch
+                DisableControlAction(0, 44, true) -- Cover
+                Wait(0)
+                
+                -- Safety check in case the thread runs too long
+                if not previewControlsDisabled then
+                    break
+                end
+            end
+        end)
+    end
 end
 
 -- Main thread for input handling
