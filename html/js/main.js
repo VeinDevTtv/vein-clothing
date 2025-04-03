@@ -31,6 +31,7 @@ const app = new Vue({
         selectedDamagedItems: [],
         laundryPrice: 50,
         repairPrice: 100,
+        defaultImage: 'https://via.placeholder.com/100',
         locales: {
             ui: {
                 store: 'Store',
@@ -528,6 +529,9 @@ const app = new Vue({
         window.addEventListener('message', (event) => {
             const data = event.data;
             
+            // Debug message
+            console.log('Received NUI message:', data);
+            
             switch (data.type) {
                 case 'show':
                     this.visible = true;
@@ -543,6 +547,21 @@ const app = new Vue({
                     this.dirtyItems = data.dirtyItems || [];
                     this.damagedItems = data.damagedItems || [];
                     this.nearbyPlayers = data.nearbyPlayers || [];
+                    break;
+                
+                // For backward compatibility with the old format
+                case 'openStore':
+                case 'action':
+                    if (data.action === "openStore") {
+                        this.visible = true;
+                        this.inStore = true;
+                        this.inLaundromat = false;
+                        this.inTailor = false;
+                        this.currentStore = data.store || data.storeData || null;
+                        this.playerMoney = data.playerMoney || 0;
+                        this.storeItems = data.inventory || [];
+                        this.currentView = 'store';
+                    }
                     break;
                     
                 case 'updateMoney':

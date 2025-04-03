@@ -1,5 +1,12 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 
+-- Debug function to help track NUI issues
+function DebugNUI(message)
+    if Config and Config.Debug then
+        print("^5[vein-clothing:NUI] " .. message .. "^7")
+    end
+end
+
 -- Add SafePlayerPedId at the top of the file
 local function SafePlayerPedId()
     local ped = PlayerPedId()

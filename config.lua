@@ -265,7 +265,8 @@ Config.UI = {
     Language = 'en', -- Default language
     EnableAnimations = true, -- Enable UI animations
     EnableSounds = true, -- Enable UI sounds
-    EnableNotifications = true -- Enable in-game notifications
+    EnableNotifications = true, -- Enable in-game notifications
+    ShowTooltips = true -- Enable tooltips
 }
 
 --[[
@@ -322,3 +323,15 @@ Config.Debug = {
     LogToFile = false, -- Log to file
     LogToConsole = true -- Log to console
 }
+
+-- UI Configuration
+if not Config.UI then
+    Config.UI = {}
+    Config.UI.Theme = "dark"
+    Config.UI.Language = "en"
+    Config.UI.EnableSounds = true
+    Config.UI.ShowTooltips = true
+end
+
+-- Debug mode
+Config.Debug = true  -- Set to true to enable debug output while troubleshooting

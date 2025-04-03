@@ -31,9 +31,9 @@ files {
     'html/css/*.css',
     'html/js/*.js',
     -- 'html/fonts/*.ttf',
-    -- 'html/img/*.png',
-    -- 'html/img/*.jpg',
-    -- 'html/img/*.svg'
+    'html/img/*.png',
+    'html/img/*.jpg',
+    'html/img/*.svg'
 }
 
 lua54 'yes'

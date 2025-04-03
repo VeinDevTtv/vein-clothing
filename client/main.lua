@@ -6,6 +6,22 @@ local currentOutfit = {}
 local inWardrobe = false
 local clothingPeds = {}
 
+-- Import PolyZone for zone creation
+local CircleZone
+if GetResourceState('PolyZone') ~= 'missing' then
+    CircleZone = exports['PolyZone']:CircleZone
+else
+    -- Fallback mock if PolyZone is not available
+    CircleZone = {
+        Create = function(coords, radius, options)
+            return {
+                destroy = function() end,
+                onPlayerInOut = function(cb) end
+            }
+        end
+    }
+end
+
 -- Global variables for the clothing system
 currentOutfit = {}
 currentStore = nil
@@ -58,14 +74,32 @@ end
 -- Initialize player data
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     PlayerData = QBCore.Functions.GetPlayerData()
-    LoadClothingBlips()
-    LoadPeds()
+    
+    -- Load the core features
+    LoadStores()
+    LoadLaundromats()
+    LoadTailors()
+    LoadPlayerOutfit()
 end)
 
 RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
     PlayerData = {}
     currentOutfit = {}
-    DestroyPeds()
+    
+    -- Clean up resources
+    for _, npc in pairs(storeNPCs) do
+        if DoesEntityExist(npc.handle) then
+            DeleteEntity(npc.handle)
+        end
+    end
+    storeNPCs = {}
+    
+    for _, zone in pairs(storeZones) do
+        if zone and zone.destroy then
+            zone:destroy()
+        end
+    end
+    storeZones = {}
 end)
 
 RegisterNetEvent('QBCore:Client:OnJobUpdate', function(JobInfo)
@@ -784,12 +818,35 @@ end, false)
 
 -- Initialize function (called on script start)
 function Initialize()
-    LoadStores()
+    PlayerData = QBCore.Functions.GetPlayerData()
+    
+    -- Debug config message
+    if Config.Debug then
+        print("^2[vein-clothing] Initializing with config: ^7")
+        for k, v in pairs(Config) do
+            if type(v) ~= "table" then
+                print("  " .. k .. ": " .. tostring(v))
+            else
+                print("  " .. k .. ": table")
+            end
+        end
+    end
+    
+    -- Load various components in the correct order
+    LoadStores()       -- This creates store clerks with qb-target
     LoadLaundromats()
     LoadTailors()
     LoadPlayerOutfit()
-    RegisterCommands()
     StartConditionMonitoring()
+    
+    -- Export the config for other resources to use
+    exports('GetClothingConfig', function()
+        return Config
+    end)
+    
+    if Config.Debug then
+        print("^2[vein-clothing] Initialization complete!^7")
+    end
 end
 
 -- Load player's saved outfit on spawn
@@ -810,6 +867,11 @@ end
 
 -- Create store blips on the map
 function LoadStores()
+    -- Debug log
+    if Config.Debug then
+        print("^3[vein-clothing] Loading stores...^7")
+    end
+    
     -- Remove existing blips first
     if currentStoreBlip then
         RemoveBlip(currentStoreBlip)
@@ -826,12 +888,18 @@ function LoadStores()
     
     -- Clear existing zones
     for _, zone in pairs(storeZones) do
-        zone:destroy()
+        if zone and zone.destroy then
+            zone:destroy()
+        end
     end
     storeZones = {}
     
     -- Create new blips and NPCs
     for storeType, storeData in pairs(Config.Stores) do
+        if Config.Debug then
+            print("^3[vein-clothing] Setting up store: " .. storeType .. "^7")
+        end
+        
         for i, location in ipairs(storeData.locations) do
             -- Create blip
             local blip = AddBlipForCoord(location.x, location.y, location.z)
@@ -845,71 +913,94 @@ function LoadStores()
             EndTextCommandSetBlipName(blip)
             
             -- Create store clerk NPC
-            CreateStoreClerk(storeType, location, i)
+            local model = GetHashKey(storeData.clerk.model)
+            RequestModel(model)
+            while not HasModelLoaded(model) do
+                Wait(1)
+            end
             
-            -- Create interaction zone
-            local zoneName = storeType .. "_" .. i
-            local radius = 2.0
-            local zone = CircleZone:Create(vector3(location.x, location.y, location.z), radius, {
-                name = zoneName,
-                debugPoly = Config.Debug,
-                useZ = true
+            local npc = CreatePed(4, model, location.x, location.y, location.z - 1.0, location.w, false, true)
+            FreezeEntityPosition(npc, true)
+            SetEntityInvincible(npc, true)
+            SetBlockingOfNonTemporaryEvents(npc, true)
+            
+            -- Apply animation
+            TaskStartScenarioInPlace(npc, storeData.clerk.scenario, 0, true)
+            
+            -- Store reference to NPC
+            table.insert(storeNPCs, {
+                handle = npc, 
+                type = storeType, 
+                index = i,
+                location = location
             })
             
-            zone:onPlayerInOut(function(isPointInside)
-                if isPointInside then
-                    isInClothingStore = true
-                    currentStore = storeType
-                    QBCore.Functions.Notify(Lang:t('info.press_to_browse', {key = "~INPUT_CONTEXT~", store = storeData.label}), 'primary', 5000)
-                else
-                    if currentStore == storeType then
-                        isInClothingStore = false
-                        currentStore = nil
-                    end
+            -- Add target interaction if enabled
+            if Config.UseTarget then
+                if Config.Debug then
+                    print("^3[vein-clothing] Adding qb-target to clerk NPC^7")
                 end
-            end)
+                
+                exports['qb-target']:AddTargetEntity(npc, {
+                    options = {
+                        {
+                            type = "client",
+                            event = "vein-clothing:client:openStore",
+                            icon = "fas fa-tshirt",
+                            label = "Browse " .. storeData.label,
+                            args = {
+                                store = storeType
+                            }
+                        }
+                    },
+                    distance = Config.PlayerInteraction.MaxDistance
+                })
+            else
+                -- Create interaction zone if not using target
+                if CircleZone then
+                    local zone = CircleZone:Create(
+                        vector3(location.x, location.y, location.z), 
+                        3.0, 
+                        {
+                            name = storeType .. "_" .. i,
+                            debugPoly = Config.Debug,
+                            useZ = true
+                        }
+                    )
+                    
+                    zone:onPlayerInOut(function(isPointInside)
+                        if isPointInside then
+                            isInClothingStore = true
+                            currentStore = storeType
+                            QBCore.Functions.Notify("Press [E] to browse " .. storeData.label, 'primary', 5000)
+                        else
+                            if currentStore == storeType then
+                                isInClothingStore = false
+                                currentStore = nil
+                            end
+                        end
+                    end)
+                    
+                    table.insert(storeZones, zone)
+                end
+            end
             
-            table.insert(storeZones, zone)
+            -- Clean up model
+            SetModelAsNoLongerNeeded(model)
         end
     end
-end
-
--- Create store clerk NPCs
-function CreateStoreClerk(storeType, location, index)
-    local storeData = Config.Stores[storeType]
-    local clerk = {
-        type = storeType,
-        location = location,
-        index = index,
-        handle = nil
-    }
     
-    CreateThread(function()
-        local model = GetHashKey(storeData.clerk.model)
-        RequestModel(model)
-        while not HasModelLoaded(model) do
-            Wait(0)
-        end
-        
-        local npc = CreatePed(4, model, location.x, location.y, location.z - 1.0, location.w, false, true)
-        FreezeEntityPosition(npc, true)
-        SetEntityInvincible(npc, true)
-        SetBlockingOfNonTemporaryEvents(npc, true)
-        
-        -- Apply animations
-        if storeData.clerk.scenario then
-            TaskStartScenarioInPlace(npc, storeData.clerk.scenario, 0, true)
-        end
-        
-        clerk.handle = npc
-        table.insert(storeNPCs, clerk)
-        
-        SetModelAsNoLongerNeeded(model)
-    end)
+    if Config.Debug then
+        print("^3[vein-clothing] Successfully loaded " .. #storeNPCs .. " store NPCs^7")
+    end
 end
 
 -- Load laundromat locations
 function LoadLaundromats()
+    if Config.Debug then
+        print("^3[vein-clothing] Loading laundromats...^7")
+    end
+    
     for i, location in ipairs(Config.Laundromats) do
         -- Create blip
         local blip = AddBlipForCoord(location.coords.x, location.coords.y, location.coords.z)
@@ -919,49 +1010,14 @@ function LoadLaundromats()
         SetBlipColour(blip, 3)
         SetBlipAsShortRange(blip, true)
         BeginTextCommandSetBlipName("STRING")
-        AddTextComponentString(Lang:t('ui.laundromat'))
+        AddTextComponentString("Laundromat")
         EndTextCommandSetBlipName(blip)
         
-        -- Create interaction zone
-        local zoneName = "laundromat_" .. i
-        local zone = CircleZone:Create(vector3(location.coords.x, location.coords.y, location.coords.z), 2.0, {
-            name = zoneName,
-            debugPoly = Config.Debug,
-            useZ = true
-        })
-        
-        zone:onPlayerInOut(function(isPointInside)
-            if isPointInside then
-                isInLaundromat = true
-                QBCore.Functions.Notify(Lang:t('info.press_to_access', {key = "~INPUT_CONTEXT~", place = Lang:t('ui.laundromat')}), 'primary', 5000)
-            else
-                isInLaundromat = false
-            end
-        end)
-        
-        table.insert(storeZones, zone) -- Reuse the same table
-    end
-end
-
--- Load tailor shop locations
-function LoadTailors()
-    for i, location in ipairs(Config.Tailors) do
-        -- Create blip
-        local blip = AddBlipForCoord(location.coords.x, location.coords.y, location.coords.z)
-        SetBlipSprite(blip, location.blip.sprite)
-        SetBlipDisplay(blip, 4)
-        SetBlipScale(blip, 0.7)
-        SetBlipColour(blip, 21)
-        SetBlipAsShortRange(blip, true)
-        BeginTextCommandSetBlipName("STRING")
-        AddTextComponentString(Lang:t('ui.tailor'))
-        EndTextCommandSetBlipName(blip)
-        
-        -- Create tailor NPC
-        local model = GetHashKey("s_m_m_tailor_01")
+        -- Create laundromat NPC
+        local model = GetHashKey("s_f_y_shop_mid")
         RequestModel(model)
         while not HasModelLoaded(model) do
-            Wait(0)
+            Wait(1)
         end
         
         local npc = CreatePed(4, model, location.coords.x, location.coords.y, location.coords.z - 1.0, location.coords.w, false, true)
@@ -970,27 +1026,142 @@ function LoadTailors()
         SetBlockingOfNonTemporaryEvents(npc, true)
         TaskStartScenarioInPlace(npc, "WORLD_HUMAN_STAND_IMPATIENT", 0, true)
         
-        -- Create interaction zone
-        local zoneName = "tailor_" .. i
-        local zone = CircleZone:Create(vector3(location.coords.x, location.coords.y, location.coords.z), 2.0, {
-            name = zoneName,
-            debugPoly = Config.Debug,
-            useZ = true
+        table.insert(storeNPCs, {
+            handle = npc, 
+            type = "laundromat", 
+            index = i,
+            location = location.coords
         })
         
-        zone:onPlayerInOut(function(isPointInside)
-            if isPointInside then
-                isInTailor = true
-                QBCore.Functions.Notify(Lang:t('info.press_to_access', {key = "~INPUT_CONTEXT~", place = Lang:t('ui.tailor')}), 'primary', 5000)
-            else
-                isInTailor = false
+        -- Add target interaction
+        if Config.UseTarget then
+            exports['qb-target']:AddTargetEntity(npc, {
+                options = {
+                    {
+                        type = "client",
+                        event = "vein-clothing:client:openLaundromat",
+                        icon = "fas fa-soap",
+                        label = "Use Laundromat"
+                    }
+                },
+                distance = Config.PlayerInteraction.MaxDistance
+            })
+        else
+            -- Create interaction zone
+            if CircleZone then
+                local zone = CircleZone:Create(
+                    vector3(location.coords.x, location.coords.y, location.coords.z), 
+                    2.0, 
+                    {
+                        name = "laundromat_" .. i,
+                        debugPoly = Config.Debug,
+                        useZ = true
+                    }
+                )
+                
+                zone:onPlayerInOut(function(isPointInside)
+                    if isPointInside then
+                        isInLaundromat = true
+                        QBCore.Functions.Notify("Press [E] to use the laundromat", "primary", 5000)
+                    else
+                        isInLaundromat = false
+                    end
+                end)
+                
+                table.insert(storeZones, zone)
             end
-        end)
-        
-        table.insert(storeZones, zone) -- Reuse the same table
-        table.insert(storeNPCs, {handle = npc, type = "tailor", index = i})
+        end
         
         SetModelAsNoLongerNeeded(model)
+    end
+    
+    if Config.Debug then
+        print("^3[vein-clothing] Successfully loaded " .. #Config.Laundromats .. " laundromats^7")
+    end
+end
+
+-- Load tailor shop locations
+function LoadTailors()
+    if Config.Debug then
+        print("^3[vein-clothing] Loading tailors...^7")
+    end
+    
+    for i, location in ipairs(Config.Tailors) do
+        -- Create blip
+        local blip = AddBlipForCoord(location.coords.x, location.coords.y, location.coords.z)
+        SetBlipSprite(blip, location.blip.sprite)
+        SetBlipDisplay(blip, 4)
+        SetBlipScale(blip, 0.7)
+        SetBlipColour(blip, 4)
+        SetBlipAsShortRange(blip, true)
+        BeginTextCommandSetBlipName("STRING")
+        AddTextComponentString("Tailor Shop")
+        EndTextCommandSetBlipName(blip)
+        
+        -- Create tailor NPC
+        local model = GetHashKey("s_m_m_tailor_01")
+        RequestModel(model)
+        while not HasModelLoaded(model) do
+            Wait(1)
+        end
+        
+        local npc = CreatePed(4, model, location.coords.x, location.coords.y, location.coords.z - 1.0, location.coords.w, false, true)
+        FreezeEntityPosition(npc, true)
+        SetEntityInvincible(npc, true)
+        SetBlockingOfNonTemporaryEvents(npc, true)
+        TaskStartScenarioInPlace(npc, "WORLD_HUMAN_STAND_IMPATIENT", 0, true)
+        
+        table.insert(storeNPCs, {
+            handle = npc, 
+            type = "tailor", 
+            index = i,
+            location = location.coords
+        })
+        
+        -- Add target interaction
+        if Config.UseTarget then
+            exports['qb-target']:AddTargetEntity(npc, {
+                options = {
+                    {
+                        type = "client",
+                        event = "vein-clothing:client:openTailor",
+                        icon = "fas fa-cut",
+                        label = "Use Tailor Services"
+                    }
+                },
+                distance = Config.PlayerInteraction.MaxDistance
+            })
+        else
+            -- Create interaction zone
+            if CircleZone then
+                local zone = CircleZone:Create(
+                    vector3(location.coords.x, location.coords.y, location.coords.z), 
+                    2.0, 
+                    {
+                        name = "tailor_" .. i,
+                        debugPoly = Config.Debug,
+                        useZ = true
+                    }
+                )
+                
+                zone:onPlayerInOut(function(isPointInside)
+                    if isPointInside then
+                        isInTailor = true
+                        QBCore.Functions.Notify("Press [E] to use tailor services", "primary", 5000)
+                    else
+                        isInTailor = false
+                    end
+                end)
+                
+                table.insert(storeZones, zone)
+            end
+        end
+        
+        SetModelAsNoLongerNeeded(model)
+    end
+    
+    if Config.Debug then
+        print("^3[vein-clothing] Successfully loaded " .. #Config.Tailors .. " tailors^7")
     end
 end
 
@@ -1276,6 +1447,18 @@ function OpenClothingStore(storeType)
     
     local storeData = Config.Stores[storeType]
     
+    if Config.Debug then
+        print("^3[vein-clothing] Opening store: " .. storeType .. "^7")
+        print("^3[vein-clothing] Store data: ^7")
+        for k, v in pairs(storeData) do
+            if type(v) ~= "table" then
+                print("  " .. k .. ": " .. tostring(v))
+            else
+                print("  " .. k .. ": table")
+            end
+        end
+    end
+    
     -- Get store inventory from server
     QBCore.Functions.TriggerCallback('vein-clothing:server:getStoreInventory', function(inventory)
         if not inventory then
@@ -1283,8 +1466,16 @@ function OpenClothingStore(storeType)
             return
         end
         
+        if Config.Debug then
+            print("^3[vein-clothing] Got inventory with " .. #inventory .. " items^7")
+        end
+        
         -- Get player's clothing and outfits for wardrobe tab
         QBCore.Functions.TriggerCallback('vein-clothing:server:getPlayerClothing', function(clothing, outfits, wishlist)
+            if Config.Debug then
+                print("^3[vein-clothing] Opening UI^7")
+            end
+            
             -- Open the UI with the correct format matching the nui.js expectations
             SetNuiFocus(true, true)
             SendNUIMessage({

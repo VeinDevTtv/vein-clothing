@@ -107,7 +107,7 @@
                             :key="item.name"
                             :class="{ 'sold-out': item.stock <= 0 }">
                             <div class="item-image">
-                                <img :src="'img/' + item.name + '.png'" :alt="item.label">
+                                <img :src="'img/' + item.name + '.png'" :alt="item.label" @error="$event.target.src = defaultImage">
                                 <div class="item-rarity" :class="item.rarity"></div>
                                 <div class="stock" v-if="item.stock > 0">{{ locales.ui.in_stock }}: {{ item.stock }}</div>
                                 <div class="stock sold-out" v-else>{{ locales.ui.sold_out }}</div>
@@ -191,7 +191,7 @@
                             :key="item.name + item.slot"
                             :class="{ 'worn': isWorn(item.name) }">
                             <div class="item-image">
-                                <img :src="'img/' + item.name + '.png'" :alt="item.label">
+                                <img :src="'img/' + item.name + '.png'" :alt="item.label" @error="$event.target.src = defaultImage">
                                 <div class="item-rarity" :class="item.rarity"></div>
                                 <div class="condition-bar">
                                     <div class="condition-fill" :style="{ width: getConditionWidth(item) + '%', backgroundColor: getConditionColor(item) }"></div>
