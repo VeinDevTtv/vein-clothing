@@ -7,7 +7,7 @@ Config = {}
 ]]
 Config.Debug = true -- Enable debug mode for development
 Config.UseOxLib = true -- Enable ox_lib integration for enhanced features
-Config.UseOxInventory = true -- Set to true if using ox_inventory, false for QB-Core inventory
+Config.UseOxInventory = false -- Set to true if using ox_inventory, false for QB-Core inventory
 Config.UseTarget = true -- Enable qb-target integration for interactions
 Config.DefaultInteractKey = 38 -- Default key for interactions (E key)
 

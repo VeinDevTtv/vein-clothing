@@ -146,7 +146,9 @@ function LoadPeds()
                             event = "vein-clothing:client:openStore",
                             icon = "fas fa-tshirt",
                             label = "Browse " .. storeData.label,
-                            store = storeName
+                            args = {
+                                store = storeName
+                            }
                         }
                     },
                     distance = Config.PlayerInteraction.MaxDistance
@@ -244,11 +246,43 @@ end)
 RegisterNetEvent('vein-clothing:client:openStore', function(data)
     if inWardrobe then return end
     
-    local storeName = data.store
+    -- Debug log in verbose mode
+    if Config and Config.Debug then
+        print("^3[vein-clothing] openStore event received^7")
+    end
+    
+    -- Handle different data structures from target vs direct event calls
+    local storeName
+    
+    -- Direct format
+    if data and data.store then
+        storeName = data.store
+    -- qb-target format (args parameter)
+    elseif data and data.args and data.args.store then
+        storeName = data.args.store
+    end
+    
+    -- Fallback to global variable if we couldn't extract from data
+    if not storeName and currentStore then
+        storeName = currentStore
+        if Config and Config.Debug then
+            print("^3[vein-clothing] Using fallback currentStore: " .. storeName .. "^7")
+        end
+    end
+    
+    if not storeName then
+        QBCore.Functions.Notify("Could not determine which store to open", "error")
+        return
+    end
+    
+    if Config and Config.Debug then
+        print("^3[vein-clothing] Opening store: " .. storeName .. "^7")
+    end
+    
     local storeData = Config.Stores[storeName]
     
     if not storeData then
-        QBCore.Functions.Notify("Invalid store data", "error")
+        QBCore.Functions.Notify("Invalid store data for " .. storeName, "error")
         return
     end
     
@@ -266,9 +300,9 @@ RegisterNetEvent('vein-clothing:client:openStore', function(data)
             store = storeName,
             storeData = storeData,
             inventory = inventory,
-            playerMoney = PlayerData.money.cash,
-            theme = Config.UI.Theme,
-            language = Config.UI.Language
+            playerMoney = PlayerData.money and PlayerData.money.cash or 0,
+            theme = Config.UI and Config.UI.Theme or "default",
+            language = Config.UI and Config.UI.Language or "en"
         })
     end, storeName)
 end)
@@ -1378,4 +1412,11 @@ AddEventHandler('onResourceStop', function(resourceName)
         DestroyCam(previewCam, false)
         previewCam = nil
     end
-end) 
+end)
+
+-- Debug function to output values
+function DebugPrint(message)
+    if Config.Debug then
+        print("^2[vein-clothing] DEBUG: " .. message .. "^7")
+    end
+end 
