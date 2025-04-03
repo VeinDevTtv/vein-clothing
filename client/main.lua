@@ -1237,9 +1237,9 @@ function OpenClothingStore(storeName)
         })
         
         -- Double-check the money values after a small delay to ensure they're accurate
-        Citizen.SetTimeout(200, function()
-            UpdateMoneyDisplay()
-        end)
+        --Citizen.SetTimeout(200, function()
+        --    UpdateMoneyDisplay()
+        --end)
         
         -- Verify UI state after brief delay
         Citizen.SetTimeout(500, function()
