@@ -49,8 +49,11 @@ local CircleZone = {}
 
 -- Check if PolyZone is available
 if GetResourceState('PolyZone') ~= 'missing' then
-    -- Use the real PolyZone if available
-    CircleZone = exports['PolyZone'].CircleZone
+    -- Use the real PolyZone if available - proper way to get CircleZone
+    CircleZone = {}
+    CircleZone.Create = function(coords, radius, options)
+        return exports['PolyZone']:CreateCircleZone(coords, radius, options)
+    end
 else
     -- Use our mock implementation
     print("^3[WARNING] PolyZone not found. Using mock CircleZone implementation.^7")
