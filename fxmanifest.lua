@@ -9,6 +9,7 @@ shared_scripts {
     '@qb-core/shared/locale.lua',
     'locales/*.lua',
     'config.lua',
+    'config/vanilla_clothes.lua',
     'shared/items.lua'
 }
 

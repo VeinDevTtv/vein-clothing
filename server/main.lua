@@ -1469,4 +1469,71 @@ end)
 CreateThread(function()
     Wait(2000) -- Wait for everything to load
     Initialize()
+end)
+
+-- Export vanilla clothes for other resources
+exports('GetVanillaClothes', function()
+    return Config.VanillaClothes
+end)
+
+-- Register vanilla clothes as items
+Citizen.CreateThread(function()
+    Citizen.Wait(2000) -- Wait for QBCore to fully load
+    
+    print("^2[vein-clothing] Registering vanilla clothing items in QBCore.Shared.Items...^7")
+    local registeredCount = 0
+    
+    -- Helper function to register a clothing item
+    local function RegisterClothingItem(name, data)
+        -- Skip if item already exists
+        if QBCore.Shared.Items[name] then
+            return false
+        end
+        
+        -- Create the item data
+        QBCore.Shared.Items[name] = {
+            name = name,
+            label = data.label,
+            weight = 250,
+            type = 'item',
+            image = name .. '.png', -- You may need to add these images
+            unique = true,
+            useable = true,
+            shouldClose = true,
+            combinable = nil,
+            description = data.description or "A clothing item",
+            price = data.price or 100,
+            client = {
+                category = data.category,
+                component = data.component,
+                drawable = data.drawable,
+                texture = data.texture,
+                rarity = data.rarity or "common",
+                gender = (name:find("_f") and "female") or "male",
+                event = data.type == "prop" and "vein-clothing:client:wearProp" or "vein-clothing:client:wearItem"
+            }
+        }
+        
+        return true
+    end
+    
+    -- Register male clothing
+    for category, items in pairs(Config.VanillaClothes.male) do
+        for _, item in ipairs(items) do
+            if RegisterClothingItem(item.name, item) then
+                registeredCount = registeredCount + 1
+            end
+        end
+    end
+    
+    -- Register female clothing
+    for category, items in pairs(Config.VanillaClothes.female) do
+        for _, item in ipairs(items) do
+            if RegisterClothingItem(item.name, item) then
+                registeredCount = registeredCount + 1
+            end
+        end
+    end
+    
+    print("^2[vein-clothing] Successfully registered " .. registeredCount .. " vanilla clothing items^7")
 end) 

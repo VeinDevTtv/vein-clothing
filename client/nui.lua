@@ -354,4 +354,16 @@ AddEventHandler('onResourceStop', function(resourceName)
     if previewingClothes then
         EndPreviewCam()
     end
+end)
+
+-- Add a refresh wardrobe function
+RegisterNUICallback('refreshWardrobe', function(data, cb)
+    QBCore.Functions.TriggerCallback('vein-clothing:server:getPlayerClothing', function(clothing, outfits, wishlist)
+        cb({
+            success = true,
+            wardrobeItems = clothing,
+            outfits = outfits,
+            wishlistItems = wishlist
+        })
+    end)
 end) 

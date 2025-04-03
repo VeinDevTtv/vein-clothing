@@ -1383,6 +1383,11 @@ RegisterNUICallback('purchaseItem', function(data, cb)
                     end
                 end
             end, currentStore, GetPlayerGender())
+            
+            -- Notify user that item is available in wardrobe
+            Citizen.SetTimeout(500, function()
+                QBCore.Functions.Notify("Item added to your wardrobe! Use it from inventory or access wardrobe to try it on.", "primary", 5000)
+            end)
         else
             QBCore.Functions.Notify(message, "error")
         end
@@ -1725,6 +1730,9 @@ RegisterNetEvent('vein-clothing:client:openWardrobe', function()
             print("^3[vein-clothing] Warning: No clothing items found in player inventory^7")
         else
             print("^2[vein-clothing] Found " .. #clothing .. " clothing items in player inventory^7")
+            for i, item in ipairs(clothing) do
+                print("^2[vein-clothing] Wardrobe item: " .. i .. " - " .. item.name .. " (category: " .. item.category .. ")^7")
+            end
         end
         
         -- Set focus and state variables
@@ -1733,7 +1741,9 @@ RegisterNetEvent('vein-clothing:client:openWardrobe', function()
         -- Open NUI with wardrobe data using updated format for consistency
         SendNUIMessage({
             type = "show",
+            action = "openWardrobe",
             inStore = false,
+            inWardrobe = true,
             inLaundromat = false,
             inTailor = false,
             wardrobeItems = clothing,

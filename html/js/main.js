@@ -618,6 +618,40 @@ const app = new Vue({
             } catch (error) {
                 console.error(`UI exception in postNUI for ${eventName}:`, error);
             }
+        },
+        
+        // Add a refreshWardrobe method to the Vue app
+        refreshWardrobe() {
+            fetch('https://vein-clothing/refreshWardrobe', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    this.wardrobeItems = data.wardrobeItems;
+                    this.outfits = data.outfits;
+                    this.wishlistItems = data.wishlistItems;
+                    console.log('Wardrobe refreshed:', this.wardrobeItems.length, 'items found');
+                }
+            })
+            .catch(error => {
+                console.error('Error refreshing wardrobe:', error);
+            });
+        },
+        
+        // Update the showWardrobe method to call refreshWardrobe
+        showWardrobe() {
+            this.refreshWardrobe(); // Refresh wardrobe data when showing wardrobe
+            this.currentView = 'wardrobe';
+            this.selectedCategory = 'all';
+            this.searchQuery = '';
+            this.inStore = false;
+            this.inWardrobe = true;
+            // Additional wardrobe setup...
         }
     },
     mounted() {
