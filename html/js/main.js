@@ -212,23 +212,49 @@ const app = new Vue({
         
         closeUI() {
             this.visible = false;
-            // Replace jQuery with vanilla JS
-            fetch('https://vein-clothing/close', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json; charset=UTF-8',
-                },
-                body: JSON.stringify({})
-            });
-            
-            // Also try the other endpoint for compatibility
-            fetch('https://vein-clothing/closeUI', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json; charset=UTF-8',
-                },
-                body: JSON.stringify({})
-            });
+            // Replace jQuery with vanilla JS with error handling
+            try {
+                fetch('https://vein-clothing/close', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json; charset=UTF-8',
+                    },
+                    body: JSON.stringify({})
+                })
+                .catch(error => {
+                    console.error('Error posting to close:', error);
+                    // Try fallback
+                    return fetch('nui://vein-clothing/https//close', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json; charset=UTF-8',
+                        },
+                        body: JSON.stringify({})
+                    });
+                });
+                
+                // Also try the other endpoint for compatibility
+                fetch('https://vein-clothing/closeUI', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json; charset=UTF-8',
+                    },
+                    body: JSON.stringify({})
+                })
+                .catch(error => {
+                    console.error('Error posting to closeUI:', error);
+                    // Try fallback
+                    return fetch('nui://vein-clothing/https//closeUI', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json; charset=UTF-8',
+                        },
+                        body: JSON.stringify({})
+                    });
+                });
+            } catch (error) {
+                console.error('Exception in closeUI:', error);
+            }
         },
         
         // Item Management
@@ -547,13 +573,31 @@ const app = new Vue({
         
         // Helper function to replace $.post
         postNUI(eventName, data) {
-            fetch(`https://vein-clothing/${eventName}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json; charset=UTF-8',
-                },
-                body: JSON.stringify(data || {})
-            });
+            try {
+                fetch(`https://vein-clothing/${eventName}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json; charset=UTF-8',
+                    },
+                    body: JSON.stringify(data || {})
+                })
+                .catch(error => {
+                    console.error(`UI error posting to ${eventName}:`, error);
+                    // Try fallback to alternate path format
+                    return fetch(`nui://vein-clothing/https//${eventName}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json; charset=UTF-8',
+                        },
+                        body: JSON.stringify(data || {})
+                    });
+                })
+                .catch(error => {
+                    console.error(`UI error with fallback post to ${eventName}:`, error);
+                });
+            } catch (error) {
+                console.error(`UI exception in postNUI for ${eventName}:`, error);
+            }
         }
     },
     mounted() {
