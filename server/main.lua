@@ -76,6 +76,15 @@ function SetupDatabase()
             `item` varchar(50) DEFAULT NULL,
             `stock` int(11) DEFAULT 0,
             `last_restock` timestamp NULL DEFAULT NULL,
+            `category` varchar(50) DEFAULT 'clothes',
+            `subcategory` varchar(50) DEFAULT NULL,
+            `color` varchar(30) DEFAULT NULL,
+            `component` int(11) DEFAULT 11,
+            `drawable` int(11) DEFAULT 0,
+            `texture` int(11) DEFAULT 0,
+            `rarity` varchar(30) DEFAULT 'common',
+            `price` int(11) DEFAULT 100,
+            `label` varchar(100) DEFAULT NULL,
             PRIMARY KEY (`id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ]], {})
@@ -139,18 +148,6 @@ function LoadStoreStockFromDatabase()
                 if Config.Stores[storeType] then
                     -- Make sure the item exists in shared items
                     if QBCore.Shared.Items[itemName] then
-                        -- Get rarity
-                        local rarity = "common"
-                        if QBCore.Shared.Items[itemName].client then
-                            rarity = QBCore.Shared.Items[itemName].client.rarity or "common"
-                        end
-                        
-                        -- Get max stock
-                        local maxStock = 10
-                        if Config.Rarity and Config.Rarity[rarity] then
-                            maxStock = Config.Rarity[rarity].maxStock or 10
-                        end
-                        
                         -- Parse timestamp or use current time - with extra safety checks
                         local lastRestock = os.time()
                         
@@ -179,14 +176,55 @@ function LoadStoreStockFromDatabase()
                             print("^3[WARNING] Missing last_restock value for item " .. itemName .. " in store " .. storeType .. ", using current time^7")
                         end
                         
-                        -- Store the data
+                        -- Determine max stock based on rarity
+                        local rarity = row.rarity or "common"
+                        local maxStock = 10
+                        if Config.Rarity and Config.Rarity[rarity] then
+                            maxStock = Config.Rarity[rarity].maxStock or 10
+                        end
+                        
+                        -- Store the data with all available fields
                         StoreStock[storeType][itemName] = {
-                            stock = tonumber(row.stock),
+                            stock = tonumber(row.stock) or 1,
                             maxStock = maxStock,
+                            category = row.category or "clothes",
+                            subcategory = row.subcategory,
+                            color = row.color,
+                            component = tonumber(row.component) or 11,
+                            drawable = tonumber(row.drawable) or 0,
+                            texture = tonumber(row.texture) or 0,
                             rarity = rarity,
+                            price = tonumber(row.price) or 100,
+                            label = row.label or QBCore.Shared.Items[itemName].label,
                             lastRestock = lastRestock
                         }
+                        
+                        -- Ensure client data is available in QBCore.Shared.Items
+                        if QBCore.Shared.Items[itemName] then
+                            if not QBCore.Shared.Items[itemName].client then
+                                QBCore.Shared.Items[itemName].client = {}
+                            end
+                            
+                            -- Update the item's client data from our store data
+                            QBCore.Shared.Items[itemName].client.category = row.category or QBCore.Shared.Items[itemName].client.category or "clothes"
+                            QBCore.Shared.Items[itemName].client.subcategory = row.subcategory or QBCore.Shared.Items[itemName].client.subcategory
+                            QBCore.Shared.Items[itemName].client.color = row.color or QBCore.Shared.Items[itemName].client.color
+                            QBCore.Shared.Items[itemName].client.component = tonumber(row.component) or QBCore.Shared.Items[itemName].client.component or 11
+                            QBCore.Shared.Items[itemName].client.drawable = tonumber(row.drawable) or QBCore.Shared.Items[itemName].client.drawable or 0 
+                            QBCore.Shared.Items[itemName].client.texture = tonumber(row.texture) or QBCore.Shared.Items[itemName].client.texture or 0
+                            QBCore.Shared.Items[itemName].rarity = row.rarity or QBCore.Shared.Items[itemName].rarity or "common"
+                        end
+                    else
+                        print("^1[ERROR] Item not found in QBCore.Shared.Items: " .. itemName .. ". Attempting to register.^7")
+                        -- Try to register the missing item
+                        if RegisterMissingItem(itemName) then
+                            print("^2[SUCCESS] Registered missing item: " .. itemName .. "^7")
+                        else
+                            print("^1[ERROR] Failed to register missing item: " .. itemName .. "^7")
+                        end
                     end
+                else
+                    print("^3[WARNING] Store type not found in config: " .. storeType .. "^7")
                 end
             end
             
@@ -210,11 +248,20 @@ function SaveStoreStockToDatabase()
         -- Now insert fresh data
         for storeType, items in pairs(StoreStock) do
             for itemName, stockData in pairs(items) do
-                MySQL.Async.execute('INSERT INTO store_inventory (store, item, stock, last_restock) VALUES (?, ?, ?, ?)', {
+                MySQL.Async.execute('INSERT INTO store_inventory (store, item, stock, last_restock, category, subcategory, color, component, drawable, texture, rarity, price, label) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', {
                     storeType,
                     itemName,
                     stockData.stock,
-                    type(stockData.lastRestock) == "number" and os.date('%Y-%m-%d %H:%M:%S', stockData.lastRestock) or os.date('%Y-%m-%d %H:%M:%S', os.time())
+                    type(stockData.lastRestock) == "number" and os.date('%Y-%m-%d %H:%M:%S', stockData.lastRestock) or os.date('%Y-%m-%d %H:%M:%S', os.time()),
+                    stockData.category or "clothes",
+                    stockData.subcategory,
+                    stockData.color,
+                    stockData.component or 11,
+                    stockData.drawable or 0,
+                    stockData.texture or 0,
+                    stockData.rarity or "common",
+                    stockData.price or 100,
+                    stockData.label
                 })
             end
         end
@@ -1446,38 +1493,128 @@ function RegisterMissingItem(itemName)
         local itemNameLower = string.lower(itemName)
         local component = 11 -- Default to torso
         local category = "clothes"
+        local subcategory = nil
+        local color = nil
         
+        -- Try to determine category and subcategory from item name
         if string.find(itemNameLower, "necklace") or string.find(itemNameLower, "chain") or string.find(itemNameLower, "pearl") then
             component = 7
             category = "accessories"
-        elseif string.find(itemNameLower, "watch") or string.find(itemNameLower, "bracelet") then
+            subcategory = "necklace"
+        elseif string.find(itemNameLower, "watch") then
             component = 6
             category = "accessories"
-        elseif string.find(itemNameLower, "hat") or string.find(itemNameLower, "cap") then
+            subcategory = "watch"
+        elseif string.find(itemNameLower, "bracelet") then
+            component = 6
+            category = "accessories"
+            subcategory = "bracelet"
+        elseif string.find(itemNameLower, "hat") then
             component = 0
             category = "hats"
+            subcategory = "hat"
+        elseif string.find(itemNameLower, "cap") then
+            component = 0
+            category = "hats"
+            subcategory = "cap"
+        elseif string.find(itemNameLower, "beanie") then
+            component = 0
+            category = "hats"
+            subcategory = "beanie"
         elseif string.find(itemNameLower, "glass") then
             component = 1
             category = "glasses"
-        elseif string.find(itemNameLower, "pant") or string.find(itemNameLower, "jean") or string.find(itemNameLower, "short") then
+            subcategory = string.find(itemNameLower, "sun") and "sunglasses" or "reading"
+        elseif string.find(itemNameLower, "pant") or string.find(itemNameLower, "jean") then
             component = 4
             category = "pants"
-        elseif string.find(itemNameLower, "shoe") or string.find(itemNameLower, "boot") then
+            subcategory = string.find(itemNameLower, "jean") and "jeans" or "pants"
+        elseif string.find(itemNameLower, "short") then
+            component = 4
+            category = "pants"
+            subcategory = "shorts"
+        elseif string.find(itemNameLower, "skirt") then
+            component = 4
+            category = "pants"
+            subcategory = "skirt"
+        elseif string.find(itemNameLower, "shoe") then
             component = 6
             category = "shoes"
+            subcategory = "shoes"
+        elseif string.find(itemNameLower, "boot") then
+            component = 6 
+            category = "shoes"
+            subcategory = "boots"
+        elseif string.find(itemNameLower, "sneaker") then
+            component = 6
+            category = "shoes"
+            subcategory = "sneakers"
+        elseif string.find(itemNameLower, "heel") then
+            component = 6
+            category = "shoes"
+            subcategory = "heels"
+        elseif string.find(itemNameLower, "tshirt") or string.find(itemNameLower, "t_shirt") or string.find(itemNameLower, "t-shirt") then
+            component = 11
+            category = "shirts"
+            subcategory = "tshirt"
+        elseif string.find(itemNameLower, "polo") then
+            component = 11
+            category = "shirts"
+            subcategory = "polo"
+        elseif string.find(itemNameLower, "hoodie") then
+            component = 11
+            category = "shirts"
+            subcategory = "hoodie"
+        elseif string.find(itemNameLower, "shirt") then
+            component = 11
+            category = "shirts"
+            subcategory = "shirt"
+        elseif string.find(itemNameLower, "jacket") then
+            component = 11
+            category = "shirts"
+            subcategory = "jacket"
+        end
+        
+        -- Try to determine color from item name
+        local colorNames = {
+            {"white", "white"}, {"black", "black"}, {"red", "red"}, {"blue", "blue"},
+            {"green", "green"}, {"yellow", "yellow"}, {"purple", "purple"}, {"pink", "pink"},
+            {"brown", "brown"}, {"gray", "gray"}, {"grey", "gray"}, {"orange", "orange"},
+            {"tan", "brown"}, {"silver", "silver"}, {"gold", "gold"}
+        }
+        
+        for _, colorPair in ipairs(colorNames) do
+            if string.find(itemNameLower, colorPair[1]) then
+                color = colorPair[2]
+                break
+            end
         end
         
         -- Create a generic item
         local label = itemName:gsub("_", " "):gsub("^%l", string.upper)
         local success = RegisterSharedItem(itemName, label, "A clothing item", 0.1)
         
-        -- Set the component and category
+        -- Set the component, category, subcategory, and color
         if success and QBCore.Shared.Items[itemName] then
             QBCore.Shared.Items[itemName].client.component = component
             QBCore.Shared.Items[itemName].client.category = category
             QBCore.Shared.Items[itemName].client.drawable = 0
             QBCore.Shared.Items[itemName].client.texture = 0
-            print("^3[ITEM-RECOVERY] Created generic item " .. itemName .. " with component " .. component .. "^7")
+            
+            if subcategory then
+                QBCore.Shared.Items[itemName].client.subcategory = subcategory
+            end
+            
+            if color then
+                QBCore.Shared.Items[itemName].client.color = color
+            end
+            
+            print("^3[ITEM-RECOVERY] Created generic item " .. itemName .. 
+                " with component " .. component .. 
+                ", category " .. category .. 
+                (subcategory and (", subcategory " .. subcategory) or "") .. 
+                (color and (", color " .. color) or "") .. "^7")
+            
             return true
         end
     end
@@ -2644,12 +2781,26 @@ function RegisterSharedItem(name, label, description, weight)
             -- Check both male and female items
             vanillaItem = findItemInConfig("male", name) or findItemInConfig("female", name)
             
-            -- Set rarity if we found the vanilla item
-            if vanillaItem and vanillaItem.rarity then
-                QBCore.Shared.Items[name].client.rarity = vanillaItem.rarity
-                print("^3[DEBUG] Set rarity for item " .. name .. " to " .. vanillaItem.rarity .. "^7")
+            -- Set properties if we found the vanilla item
+            if vanillaItem then
+                if vanillaItem.rarity then
+                    QBCore.Shared.Items[name].client.rarity = vanillaItem.rarity
+                    print("^3[DEBUG] Set rarity for item " .. name .. " to " .. vanillaItem.rarity .. "^7")
+                end
+                
+                -- Set subcategory if available
+                if vanillaItem.subcategory then
+                    QBCore.Shared.Items[name].client.subcategory = vanillaItem.subcategory
+                    print("^3[DEBUG] Set subcategory for item " .. name .. " to " .. vanillaItem.subcategory .. "^7")
+                end
+                
+                -- Set color if available
+                if vanillaItem.color then
+                    QBCore.Shared.Items[name].client.color = vanillaItem.color
+                    print("^3[DEBUG] Set color for item " .. name .. " to " .. vanillaItem.color .. "^7")
+                end
             else
-                itemData.client.rarity = "common" -- Default rarity
+                QBCore.Shared.Items[name].client.rarity = QBCore.Shared.Items[name].client.rarity or "common" -- Default rarity
             end
         end
         
@@ -2716,7 +2867,7 @@ function RegisterSharedItem(name, label, description, weight)
     itemData.client.drawable = 0
     itemData.client.texture = 0
     
-    -- Handle rarity - look up in Config.VanillaClothes if available
+    -- Handle additional properties - look up in Config.VanillaClothes if available
     if Config.VanillaClothes then
         local vanillaItem = nil
         
@@ -2738,10 +2889,45 @@ function RegisterSharedItem(name, label, description, weight)
         -- Check both male and female items
         vanillaItem = findItemInConfig("male", name) or findItemInConfig("female", name)
         
-        -- Set rarity if we found the vanilla item
-        if vanillaItem and vanillaItem.rarity then
-            itemData.client.rarity = vanillaItem.rarity
-            print("^3[DEBUG] Set rarity for new item " .. name .. " to " .. vanillaItem.rarity .. "^7")
+        -- Set properties if we found the vanilla item
+        if vanillaItem then
+            -- Set component, drawable, texture from vanilla item if available
+            if vanillaItem.component then
+                itemData.client.component = vanillaItem.component
+            end
+            
+            if vanillaItem.drawable then
+                itemData.client.drawable = vanillaItem.drawable
+            end
+            
+            if vanillaItem.texture then
+                itemData.client.texture = vanillaItem.texture
+            end
+            
+            -- Set category from vanilla item if available
+            if vanillaItem.category then
+                itemData.client.category = vanillaItem.category
+            end
+            
+            -- Set subcategory if available
+            if vanillaItem.subcategory then
+                itemData.client.subcategory = vanillaItem.subcategory
+                print("^3[DEBUG] Set subcategory for new item " .. name .. " to " .. vanillaItem.subcategory .. "^7")
+            end
+            
+            -- Set color if available
+            if vanillaItem.color then
+                itemData.client.color = vanillaItem.color
+                print("^3[DEBUG] Set color for new item " .. name .. " to " .. vanillaItem.color .. "^7")
+            end
+            
+            -- Set rarity from vanilla item
+            if vanillaItem.rarity then
+                itemData.client.rarity = vanillaItem.rarity
+                print("^3[DEBUG] Set rarity for new item " .. name .. " to " .. vanillaItem.rarity .. "^7")
+            else
+                itemData.client.rarity = "common" -- Default rarity
+            end
         else
             itemData.client.rarity = "common" -- Default rarity
         end
@@ -2768,6 +2954,8 @@ function RegisterSharedItem(name, label, description, weight)
             info.drawable = QBCore.Shared.Items[name].client.drawable
             info.texture = QBCore.Shared.Items[name].client.texture
             info.category = QBCore.Shared.Items[name].client.category
+            info.subcategory = QBCore.Shared.Items[name].client.subcategory
+            info.color = QBCore.Shared.Items[name].client.color
         end
         
         -- Determine if it's a prop or component
@@ -2805,27 +2993,126 @@ end
 
 -- Helper function to upsert a store item record
 function UpsertStoreItem(storeName, itemName, clientData, stock, price)
-    local encodedClientData = json.encode(clientData)
+    if not clientData then clientData = {} end
     
-    -- First try to update the existing record
-    MySQL.update('UPDATE store_inventory SET stock = ?, client_data = ?, price = ? WHERE store_name = ? AND item_name = ?', {
-        stock, encodedClientData, price, storeName, itemName
-    }, function(rowsChanged)
-        if rowsChanged == 0 then
-            -- If no rows were updated, insert a new record
-            MySQL.insert('INSERT INTO store_inventory (store_name, item_name, stock, client_data, price) VALUES (?, ?, ?, ?, ?)', {
-                storeName, itemName, stock, encodedClientData, price
-            }, function(id)
-                if id then
-                    print("^3[DATABASE] Inserted new item " .. itemName .. " for store " .. storeName .. "^7")
-                else
-                    print("^1[DATABASE] Failed to insert item " .. itemName .. " for store " .. storeName .. "^7")
+    -- Get item details from QBCore.Shared.Items
+    local item = QBCore.Shared.Items[itemName]
+    if not item then
+        print("^1[ERROR] Cannot add " .. itemName .. " to store - item not found in QBCore.Shared.Items^7")
+        return false
+    end
+    
+    -- Find item in vanilla clothes config to get properties
+    local vanillaItem = nil
+    local function findItemInConfig()
+        if Config.VanillaClothes then
+            -- Check male items
+            if Config.VanillaClothes.male then
+                for category, items in pairs(Config.VanillaClothes.male) do
+                    for _, item in ipairs(items) do
+                        if item.name == itemName then
+                            return item
+                        end
+                    end
                 end
+            end
+            
+            -- Check female items
+            if Config.VanillaClothes.female then
+                for category, items in pairs(Config.VanillaClothes.female) do
+                    for _, item in ipairs(items) do
+                        if item.name == itemName then
+                            return item
+                        end
+                    end
+                end
+            end
+        end
+        return nil
+    end
+    
+    vanillaItem = findItemInConfig()
+    
+    -- Create item data with merged properties
+    local itemData = {
+        label = clientData.label or (item and item.label) or itemName:gsub("_", " "):gsub("^%l", string.upper),
+        category = clientData.category or (item.client and item.client.category) or (vanillaItem and vanillaItem.category) or "clothes",
+        subcategory = clientData.subcategory or (item.client and item.client.subcategory) or (vanillaItem and vanillaItem.subcategory),
+        color = clientData.color or (item.client and item.client.color) or (vanillaItem and vanillaItem.color),
+        component = clientData.component or (item.client and item.client.component) or (vanillaItem and vanillaItem.component) or 11,
+        drawable = clientData.drawable or (item.client and item.client.drawable) or (vanillaItem and vanillaItem.drawable) or 0,
+        texture = clientData.texture or (item.client and item.client.texture) or (vanillaItem and vanillaItem.texture) or 0,
+        rarity = clientData.rarity or (item.client and item.client.rarity) or (vanillaItem and vanillaItem.rarity) or "common",
+        price = price or (vanillaItem and vanillaItem.price) or 100,
+        stock = stock or math.random(1, 10)
+    }
+    
+    -- First check if the item exists in the store
+    MySQL.query('SELECT id FROM store_inventory WHERE store = ? AND item = ?', {
+        storeName, itemName
+    }, function(result)
+        if result and #result > 0 then
+            -- Update existing record
+            MySQL.update('UPDATE store_inventory SET stock = ?, last_restock = NOW(), category = ?, subcategory = ?, color = ?, component = ?, drawable = ?, texture = ?, rarity = ?, price = ?, label = ? WHERE store = ? AND item = ?', {
+                itemData.stock,
+                itemData.category,
+                itemData.subcategory,
+                itemData.color,
+                itemData.component,
+                itemData.drawable,
+                itemData.texture,
+                itemData.rarity,
+                itemData.price,
+                itemData.label,
+                storeName,
+                itemName
+            }, function(rowsChanged)
+                print("^3[DATABASE] Updated " .. itemName .. " in store " .. storeName .. " (Rows affected: " .. rowsChanged .. ")^7")
             end)
         else
-            print("^3[DATABASE] Updated item " .. itemName .. " for store " .. storeName .. " (Rows affected: " .. rowsChanged .. ")^7")
+            -- Insert new record
+            MySQL.insert('INSERT INTO store_inventory (store, item, stock, last_restock, category, subcategory, color, component, drawable, texture, rarity, price, label) VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?)', {
+                storeName,
+                itemName,
+                itemData.stock,
+                itemData.category,
+                itemData.subcategory,
+                itemData.color,
+                itemData.component,
+                itemData.drawable,
+                itemData.texture,
+                itemData.rarity,
+                itemData.price,
+                itemData.label
+            }, function(id)
+                if id then
+                    print("^2[DATABASE] Added " .. itemName .. " to store " .. storeName .. "^7")
+                else
+                    print("^1[DATABASE] Failed to add " .. itemName .. " to store " .. storeName .. "^7")
+                end
+            end)
         end
     end)
+    
+    -- Update the in-memory store stock
+    if not StoreStock[storeName] then StoreStock[storeName] = {} end
+    
+    StoreStock[storeName][itemName] = {
+        stock = itemData.stock,
+        maxStock = 10, -- Can be adjusted based on rarity
+        category = itemData.category,
+        subcategory = itemData.subcategory,
+        color = itemData.color,
+        component = itemData.component,
+        drawable = itemData.drawable,
+        texture = itemData.texture,
+        rarity = itemData.rarity,
+        price = itemData.price,
+        label = itemData.label,
+        lastRestock = os.time()
+    }
+    
+    return true
 end
 
 -- Function to register all clothing items as usable

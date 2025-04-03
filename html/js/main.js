@@ -16,6 +16,8 @@ const app = new Vue({
         paymentMethod: 'cash', // Default payment method
         searchQuery: '',
         selectedCategory: null,
+        selectedSubcategory: null,
+        selectedColor: null,
         selectedRarity: null,
         priceRange: 10000,
         selectedVariations: {},
@@ -47,6 +49,8 @@ const app = new Vue({
                 repair: 'Repair',
                 search: 'Search...',
                 categories: 'Categories',
+                subcategories: 'Sub-Categories',
+                colors: 'Colors',
                 rarity: 'Rarity',
                 price_range: 'Price Range',
                 in_stock: 'In Stock',
@@ -109,6 +113,57 @@ const app = new Vue({
             { id: 'shoes', label: 'Shoes', icon: 'fas fa-shoe-prints' },
             { id: 'accessories', label: 'Accessories', icon: 'fas fa-ring' }
         ],
+        subcategories: {
+            hats: [
+                { id: 'beanie', label: 'Beanie' },
+                { id: 'cap', label: 'Cap' },
+                { id: 'cowboy', label: 'Cowboy Hat' }
+            ],
+            masks: [
+                { id: 'skull', label: 'Skull Mask' },
+                { id: 'bandana', label: 'Bandana' },
+                { id: 'medical', label: 'Medical Mask' }
+            ],
+            shirts: [
+                { id: 'tshirt', label: 'T-Shirt' },
+                { id: 'polo', label: 'Polo' },
+                { id: 'dress_shirt', label: 'Dress Shirt' },
+                { id: 'hoodie', label: 'Hoodie' }
+            ],
+            pants: [
+                { id: 'jeans', label: 'Jeans' },
+                { id: 'slacks', label: 'Slacks' },
+                { id: 'shorts', label: 'Shorts' }
+            ],
+            shoes: [
+                { id: 'sneakers', label: 'Sneakers' },
+                { id: 'boots', label: 'Boots' },
+                { id: 'dress_shoes', label: 'Dress Shoes' }
+            ],
+            accessories: [
+                { id: 'necklace', label: 'Necklace' },
+                { id: 'watch', label: 'Watch' },
+                { id: 'bracelet', label: 'Bracelet' },
+                { id: 'earrings', label: 'Earrings' }
+            ],
+            glasses: [
+                { id: 'sunglasses', label: 'Sunglasses' },
+                { id: 'reading', label: 'Reading Glasses' },
+                { id: 'sports', label: 'Sports Glasses' }
+            ]
+        },
+        colors: [
+            { id: 'black', label: 'Black', hex: '#000000' },
+            { id: 'white', label: 'White', hex: '#FFFFFF' },
+            { id: 'red', label: 'Red', hex: '#FF0000' },
+            { id: 'blue', label: 'Blue', hex: '#0000FF' },
+            { id: 'green', label: 'Green', hex: '#00FF00' },
+            { id: 'yellow', label: 'Yellow', hex: '#FFFF00' },
+            { id: 'purple', label: 'Purple', hex: '#800080' },
+            { id: 'pink', label: 'Pink', hex: '#FFC0CB' },
+            { id: 'brown', label: 'Brown', hex: '#964B00' },
+            { id: 'gray', label: 'Gray', hex: '#808080' }
+        ],
         rarities: [
             { id: 'common', label: 'Common' },
             { id: 'uncommon', label: 'Uncommon' },
@@ -130,12 +185,33 @@ const app = new Vue({
         damagedItems: []
     },
     computed: {
+        availableSubcategories() {
+            if (!this.selectedCategory || !this.subcategories[this.selectedCategory]) {
+                return [];
+            }
+            return this.subcategories[this.selectedCategory];
+        },
+        
+        availableColors() {
+            return this.colors;
+        },
+        
         filteredStoreItems() {
             let items = [...this.storeItems];
             
             // Apply category filter
             if (this.selectedCategory) {
                 items = items.filter(item => item.category === this.selectedCategory);
+            }
+            
+            // Apply subcategory filter
+            if (this.selectedSubcategory && this.selectedCategory) {
+                items = items.filter(item => item.subcategory === this.selectedSubcategory);
+            }
+            
+            // Apply color filter
+            if (this.selectedColor) {
+                items = items.filter(item => item.color === this.selectedColor);
             }
             
             // Apply rarity filter
@@ -211,6 +287,8 @@ const app = new Vue({
             this.currentView = view;
             this.searchQuery = '';
             this.selectedCategory = null;
+            this.selectedSubcategory = null;
+            this.selectedColor = null;
             this.selectedRarity = null;
         },
         
@@ -263,7 +341,21 @@ const app = new Vue({
         
         // Item Management
         selectCategory(category) {
-            this.selectedCategory = this.selectedCategory === category ? null : category;
+            if (this.selectedCategory === category) {
+                this.selectedCategory = null;
+                this.selectedSubcategory = null;
+            } else {
+                this.selectedCategory = category;
+                this.selectedSubcategory = null;
+            }
+        },
+        
+        selectSubcategory(subcategory) {
+            this.selectedSubcategory = this.selectedSubcategory === subcategory ? null : subcategory;
+        },
+        
+        selectColor(color) {
+            this.selectedColor = this.selectedColor === color ? null : color;
         },
         
         selectRarity(rarity) {

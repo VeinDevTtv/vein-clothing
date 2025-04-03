@@ -95,6 +95,32 @@
                             </div>
                         </div>
                         
+                        <!-- Sub-category filters -->
+                        <div class="subcategory-filters" v-if="selectedCategory && availableSubcategories.length > 0">
+                            <h3>{{ locales.ui.subcategories }}</h3>
+                            <div class="subcategory" 
+                                v-for="subcategory in availableSubcategories" 
+                                :key="subcategory.id" 
+                                :class="{ active: selectedSubcategory === subcategory.id }"
+                                @click="selectSubcategory(subcategory.id)">
+                                <span>{{ subcategory.label }}</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Color filters -->
+                        <div class="color-filters">
+                            <h3>{{ locales.ui.colors }}</h3>
+                            <div class="color-grid">
+                                <div class="color-item" 
+                                    v-for="color in availableColors" 
+                                    :key="color.id" 
+                                    :class="{ active: selectedColor === color.id }"
+                                    :style="{ backgroundColor: color.hex }"
+                                    @click="selectColor(color.id)">
+                                </div>
+                            </div>
+                        </div>
+                        
                         <div class="search">
                             <input type="text" v-model="searchQuery" :placeholder="locales.ui.search">
                             <i class="fas fa-search"></i>
