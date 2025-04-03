@@ -1731,7 +1731,19 @@ end)
 
 -- Function to populate store inventories with vanilla clothing
 function PopulateStoreInventories()
-    print("^2[vein-clothing] Populating store inventories with vanilla clothing...^7")
+    -- Initialize addedItems to avoid nil errors
+    local addedItems = 0
+    
+    print("^3[vein-clothing] Populating store inventories with vanilla clothing...^7")
+    
+    -- Skip if no stores are configured
+    if not Config.Stores then
+        print("^1[ERROR] No stores configured in Config.Stores^7")
+        return
+    end
+    
+    -- Initialize StoreStock if needed
+    StoreStock = StoreStock or {}
     
     -- Define which items go in which stores
     local storeInventories = {
