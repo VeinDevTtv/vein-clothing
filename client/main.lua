@@ -1628,19 +1628,50 @@ end
 RegisterNetEvent('vein-clothing:client:wearItem', function(itemData)
     if not itemData then return end
     
-    local success = HandleClothingItem(itemData)
-    if success then
-        -- Update the current outfit
-        currentOutfit[itemData.client.category] = itemData
-        
-        -- Trigger degradation
-        TriggerServerEvent('vein-clothing:server:degradeClothing', itemData.name, Config.Condition.WornDegradationMin)
-        
-        -- Show notification
-        ShowNotification('You are now wearing ' .. itemData.label, 'success')
-        HandleInventory('notification', itemData.name, 'remove', 1)
-    else
-        ShowNotification('Failed to wear ' .. itemData.label, 'error')
+    -- Check if we have valid item client data
+    if not itemData.client then
+        QBCore.Functions.Notify("This clothing item is missing configuration data", "error")
+        return
+    end
+    
+    local category = itemData.client.category
+    local component = itemData.client.component
+    local drawable = itemData.client.drawable
+    local texture = itemData.client.texture
+    
+    -- If this component is already being worn, we need to store what's currently worn
+    local previousItem = nil
+    if currentOutfit[component] then
+        previousItem = currentOutfit[component]
+        -- Notify that we're replacing an item
+        QBCore.Functions.Notify("Replaced " .. QBCore.Shared.Items[previousItem.name].label, "primary")
+    end
+    
+    -- Apply the clothing item to the player
+    SetPedComponentVariation(SafePlayerPedId(), component, drawable, texture, 0)
+    
+    -- Update the current outfit tracking
+    currentOutfit[component] = {
+        name = itemData.name,
+        drawable = drawable,
+        texture = texture,
+        variation = 0
+    }
+    
+    -- Trigger degradation
+    TriggerServerEvent('vein-clothing:server:degradeClothing', itemData.name, Config.Condition.WornDegradationMin)
+    
+    -- Show notification
+    QBCore.Functions.Notify('You are now wearing ' .. itemData.label, 'success')
+    
+    -- Debug print of current outfit if enabled
+    if Config.Debug then
+        print("^2[vein-clothing] Current outfit updated: Component " .. component .. " is now " .. itemData.name .. "^7")
+        local outfitString = "^3[vein-clothing] Current outfit: "
+        for comp, item in pairs(currentOutfit) do
+            outfitString = outfitString .. comp .. "=" .. item.name .. ", "
+        end
+        print(outfitString .. "^7")
     end
 end)
 

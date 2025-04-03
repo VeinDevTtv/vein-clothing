@@ -561,59 +561,150 @@ function RegisterCallbacks()
             elseif hasName and isInSharedItems and not hasClientData then
                 print("^3[WARNING-SERVER] Item " .. item.name .. " missing client data^7")
                 missingClientData = missingClientData + 1
+                
+                -- Add default client data for clothing items that lack it
+                if string.match(item.name, "shirt") or string.match(item.name, "top") or string.match(item.name, "jacket") or 
+                   string.match(item.name, "hoodie") or string.match(item.name, "sweater") or string.match(item.name, "tshirt") then
+                    QBCore.Shared.Items[item.name].client = {
+                        category = "shirts",
+                        component = 11,
+                        drawable = 0,
+                        texture = 0,
+                        rarity = "common",
+                        event = "vein-clothing:client:wearItem"
+                    }
+                    hasClientData = true
+                    hasCategory = true
+                    print("^2[DEBUG-SERVER] Added shirts category to " .. item.name .. "^7")
+                elseif string.match(item.name, "jean") or string.match(item.name, "pant") or string.match(item.name, "trouser") or
+                       string.match(item.name, "short") or string.match(item.name, "skirt") then
+                    QBCore.Shared.Items[item.name].client = {
+                        category = "pants",
+                        component = 4,
+                        drawable = 0,
+                        texture = 0,
+                        rarity = "common",
+                        event = "vein-clothing:client:wearItem"
+                    }
+                    hasClientData = true
+                    hasCategory = true
+                    print("^2[DEBUG-SERVER] Added pants category to " .. item.name .. "^7")
+                elseif string.match(item.name, "shoe") or string.match(item.name, "boot") or string.match(item.name, "sneaker") or
+                       string.match(item.name, "heel") or string.match(item.name, "footwear") then
+                    QBCore.Shared.Items[item.name].client = {
+                        category = "shoes",
+                        component = 6,
+                        drawable = 0,
+                        texture = 0,
+                        rarity = "common",
+                        event = "vein-clothing:client:wearItem"
+                    }
+                    hasClientData = true
+                    hasCategory = true
+                    print("^2[DEBUG-SERVER] Added shoes category to " .. item.name .. "^7")
+                elseif string.match(item.name, "hat") or string.match(item.name, "cap") or string.match(item.name, "helmet") or
+                       string.match(item.name, "beanie") then
+                    QBCore.Shared.Items[item.name].client = {
+                        category = "hats",
+                        component = 0,
+                        drawable = 0,
+                        texture = 0,
+                        rarity = "common",
+                        event = "vein-clothing:client:wearProp"
+                    }
+                    hasClientData = true
+                    hasCategory = true
+                    print("^2[DEBUG-SERVER] Added hats category to " .. item.name .. "^7")
+                elseif string.match(item.name, "glass") or string.match(item.name, "sunglass") or string.match(item.name, "eyewear") then
+                    QBCore.Shared.Items[item.name].client = {
+                        category = "glasses",
+                        component = 1,
+                        drawable = 0,
+                        texture = 0,
+                        rarity = "common",
+                        event = "vein-clothing:client:wearProp"
+                    }
+                    hasClientData = true
+                    hasCategory = true
+                    print("^2[DEBUG-SERVER] Added glasses category to " .. item.name .. "^7")
+                end
             end
             
-            -- Check if it's a clothing item
-            if item and item.name and QBCore.Shared.Items[item.name] and QBCore.Shared.Items[item.name].client and QBCore.Shared.Items[item.name].client.category then
-                print("^2[DEBUG-SERVER] Found clothing item: " .. item.name .. " in slot " .. slot .. " with category: " .. QBCore.Shared.Items[item.name].client.category .. "^7")
+            -- Only include clothing items (items with client data and category)
+            if hasCategory then
+                local itemInfo = QBCore.Shared.Items[item.name]
                 
-                itemsFound = itemsFound + 1
-                
-                -- Add to the clothing array
-                table.insert(clothing, {
+                -- Format for UI
+                local formattedItem = {
                     name = item.name,
-                    label = QBCore.Shared.Items[item.name].label,
-                    slot = item.slot,
-                    metadata = item.info or {},
-                    category = QBCore.Shared.Items[item.name].client.category,
-                    rarity = QBCore.Shared.Items[item.name].client.rarity or "common"
-                })
+                    label = itemInfo.label,
+                    description = itemInfo.description or "",
+                    slot = slot,
+                    count = item.amount,
+                    info = item.info or {},
+                    rarity = (itemInfo.client and itemInfo.client.rarity) or "common",
+                    category = (itemInfo.client and itemInfo.client.category) or "shirts",
+                    component = (itemInfo.client and itemInfo.client.component) or 11
+                }
+                
+                -- Add texture/drawable info if available
+                if itemInfo.client then
+                    formattedItem.drawable = itemInfo.client.drawable
+                    formattedItem.texture = itemInfo.client.texture
+                end
+                
+                -- Add condition info if available
+                if item.info and item.info.condition then
+                    formattedItem.condition = item.info.condition
+                else
+                    formattedItem.condition = 100
+                end
+                
+                table.insert(clothing, formattedItem)
+                itemsFound = itemsFound + 1
             end
             
             ::continue::
         end
         
-        print("^2[DEBUG-SERVER] Checked " .. itemsChecked .. " inventory slots, found " .. itemsFound .. " clothing items, " .. missingClientData .. " items missing client data^7")
+        -- Log summary
+        print("^2[DEBUG-SERVER] Wardrobe summary: " .. itemsChecked .. " items checked, " .. 
+              itemsFound .. " clothing items found, " .. missingClientData .. " missing client data^7")
         
-        -- Get player's outfits
+        -- Get player's saved outfits
         local citizenid = Player.PlayerData.citizenid
         local outfits = {}
         
-        local results = MySQL.Sync.fetchAll('SELECT * FROM player_outfits WHERE citizenid = ?', {citizenid})
-        
-        if results then
-            for _, outfit in ipairs(results) do
-                table.insert(outfits, {
-                    id = outfit.id,
-                    name = outfit.outfitname,
-                    items = json.decode(outfit.outfit),
-                    isDefault = outfit.is_default == 1
-                })
+        -- Handle database calls
+        MySQL.Async.fetchAll('SELECT * FROM player_outfits WHERE citizenid = ?', {citizenid}, function(outfitResults)
+            if outfitResults then
+                for _, outfit in ipairs(outfitResults) do
+                    -- Look for different column names depending on the database schema
+                    local outfitData = json.decode(outfit.outfit or outfit.outfitdata or outfit.outfit_data or outfit.data or "{}")
+                    
+                    if outfitData then
+                        table.insert(outfits, {
+                            id = outfit.id,
+                            name = outfit.outfitname,
+                            outfitData = outfitData
+                        })
+                    end
+                end
             end
-        end
-        
-        -- Get player's wishlist
-        local wishlist = {}
-        
-        local wishlistResults = MySQL.Sync.fetchAll('SELECT * FROM player_wishlist WHERE citizenid = ?', {citizenid})
-        
-        if wishlistResults then
-            for _, item in ipairs(wishlistResults) do
-                table.insert(wishlist, item.item)
-            end
-        end
-        
-        cb(clothing, outfits, wishlist)
+            
+            -- Get player's wishlist
+            MySQL.Async.fetchAll('SELECT * FROM player_wishlist WHERE citizenid = ?', {citizenid}, function(wishlistResults)
+                local wishlist = {}
+                
+                if wishlistResults then
+                    for _, item in ipairs(wishlistResults) do
+                        table.insert(wishlist, item.item)
+                    end
+                end
+                
+                cb(clothing, outfits, wishlist)
+            end)
+        end)
     end)
     
     -- Get player's default outfit callback
@@ -1179,13 +1270,12 @@ exports('getAllClothing', function()
 end)
 
 -- Function to handle server-side inventory operations based on config
-function HandleInventory(action, ...)
+function HandleInventory(action, source, ...)
     local args = {...}
     local inventoryType = Config.Inventory.Type
-    local source = args[1]
     
     if action == 'addItem' then
-        local item, amount, metadata = args[2], args[3] or 1, args[4] or nil
+        local item, amount, metadata = args[1], args[2] or 1, args[3] or nil
         if inventoryType == 'qb-inventory' then
             return exports['qb-core']:GetCoreObject().Functions.AddItem(source, item, amount, metadata)
         elseif inventoryType == 'ox_inventory' then
@@ -1195,7 +1285,7 @@ function HandleInventory(action, ...)
             return exports[Config.Inventory.ResourceName][Config.Inventory.Custom.AddItem](source, item, amount, metadata)
         end
     elseif action == 'removeItem' then
-        local item, amount, metadata = args[2], args[3] or 1, args[4] or nil
+        local item, amount, metadata = args[1], args[2] or 1, args[3] or nil
         if inventoryType == 'qb-inventory' then
             return exports['qb-core']:GetCoreObject().Functions.RemoveItem(source, item, amount, metadata)
         elseif inventoryType == 'ox_inventory' then
@@ -1205,7 +1295,7 @@ function HandleInventory(action, ...)
             return exports[Config.Inventory.ResourceName][Config.Inventory.Custom.RemoveItem](source, item, amount, metadata)
         end
     elseif action == 'getItem' then
-        local item = args[2]
+        local item = args[1]
         if inventoryType == 'qb-inventory' then
             return exports['qb-core']:GetCoreObject().Shared.Items[item]
         elseif inventoryType == 'ox_inventory' then
@@ -1214,8 +1304,23 @@ function HandleInventory(action, ...)
             -- Custom inventory get item
             return exports[Config.Inventory.ResourceName][Config.Inventory.Custom.GetItemLabel](item)
         end
+    elseif action == 'notification' then
+        local item, type, qty = args[1], args[2], args[3] or 1
+        if inventoryType == 'qb-inventory' then
+            TriggerClientEvent('inventory:client:ItemBox', source, QBCore.Shared.Items[item], type, qty)
+        elseif inventoryType == 'ox_inventory' then
+            local title = type == 'add' and 'Item Added' or 'Item Removed'
+            TriggerClientEvent('ox_inventory:notify', source, {
+                title = title,
+                description = QBCore.Shared.Items[item].label .. ' x' .. qty,
+                type = type == 'add' and 'success' or 'error'
+            })
+        elseif inventoryType == 'custom' then
+            -- Custom inventory notification
+            TriggerClientEvent(Config.Inventory.Custom.TriggerEvent, source, item, type, qty)
+        end
     elseif action == 'hasItem' then
-        local item, amount = args[2], args[3] or 1
+        local item, amount = args[1], args[2] or 1
         if inventoryType == 'qb-inventory' then
             return exports['qb-core']:GetCoreObject().Functions.HasItem(source, item, amount)
         elseif inventoryType == 'ox_inventory' then
@@ -1285,6 +1390,52 @@ RegisterNetEvent('vein-clothing:server:degradeClothing', function(item, amount)
     
     -- Update clothing condition in database
     UpdateClothingCondition(citizenid, item, amount)
+end)
+
+-- Register all clothing items as useable
+Citizen.CreateThread(function()
+    -- Wait a moment to ensure all items are loaded
+    Citizen.Wait(1000)
+    
+    print("^2[vein-clothing] Registering useable clothing items...^7")
+    local registeredCount = 0
+    
+    -- Loop through all items to find clothing
+    for itemName, item in pairs(QBCore.Shared.Items) do
+        if item.client and (item.client.category or item.client.component) then
+            -- Determine if it's a prop or regular clothing
+            local isProp = (item.client.type == 'prop' or 
+                           (item.client.category and 
+                            (item.client.category == 'hats' or 
+                             item.client.category == 'glasses' or 
+                             item.client.category == 'ears' or 
+                             item.client.category == 'watches' or 
+                             item.client.category == 'bracelets')))
+            
+            -- Register the item as useable
+            QBCore.Functions.CreateUseableItem(itemName, function(source, item)
+                local Player = QBCore.Functions.GetPlayer(source)
+                if not Player then return end
+                
+                if isProp then
+                    -- Trigger prop wear event
+                    TriggerClientEvent('vein-clothing:client:wearProp', source, QBCore.Shared.Items[itemName])
+                else
+                    -- Trigger regular clothing wear event
+                    TriggerClientEvent('vein-clothing:client:wearItem', source, QBCore.Shared.Items[itemName])
+                end
+                
+                -- Log the clothing usage
+                if Config.Debug then
+                    print("^2[vein-clothing] Player " .. Player.PlayerData.citizenid .. " used clothing item: " .. itemName .. "^7")
+                end
+            end)
+            
+            registeredCount = registeredCount + 1
+        end
+    end
+    
+    print("^2[vein-clothing] Successfully registered " .. registeredCount .. " useable clothing items^7")
 end)
 
 -- Main Initialize function - called when resource starts
