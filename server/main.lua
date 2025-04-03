@@ -2154,15 +2154,15 @@ function PopulateStoreInventories()
                         itemName,
                         stock,
                         os.date('%Y-%m-%d %H:%M:%S', os.time()),
-                        item.client.category or "unknown",
-                        item.client.subcategory or "general",
-                        item.client.color or "neutral",
-                        item.client.component or 11,
-                        item.client.drawable or 0,
-                        item.client.texture or 0,
+                        (QBCore.Shared.Items[itemName] and QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.category) or "unknown",
+                        (QBCore.Shared.Items[itemName] and QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.subcategory) or "general",
+                        (QBCore.Shared.Items[itemName] and QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.color) or "neutral",
+                        (QBCore.Shared.Items[itemName] and QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.component) or 11,
+                        (QBCore.Shared.Items[itemName] and QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.drawable) or 0,
+                        (QBCore.Shared.Items[itemName] and QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.texture) or 0,
                         rarity,
                         price,
-                        item.label or itemName
+                        (QBCore.Shared.Items[itemName] and QBCore.Shared.Items[itemName].label) or itemName
                     }, function(rowsAffected)
                         print("^2[DATABASE] Inserted item " .. itemName .. " for store " .. storeType .. " (Rows affected: " .. tostring(rowsAffected) .. ")^7")
                     end)
@@ -2284,15 +2284,15 @@ function PopulateStoreInventories()
                         itemName,
                         stock,
                         os.date('%Y-%m-%d %H:%M:%S', os.time()),
-                        item.client.category or "unknown",
-                        item.client.subcategory or "general",
-                        item.client.color or "neutral",
-                        item.client.component or 11,
-                        item.client.drawable or 0,
-                        item.client.texture or 0,
+                        (QBCore.Shared.Items[itemName] and QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.category) or "unknown",
+                        (QBCore.Shared.Items[itemName] and QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.subcategory) or "general",
+                        (QBCore.Shared.Items[itemName] and QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.color) or "neutral",
+                        (QBCore.Shared.Items[itemName] and QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.component) or 11,
+                        (QBCore.Shared.Items[itemName] and QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.drawable) or 0,
+                        (QBCore.Shared.Items[itemName] and QBCore.Shared.Items[itemName].client and QBCore.Shared.Items[itemName].client.texture) or 0,
                         rarity,
                         price,
-                        item.label or itemName
+                        (QBCore.Shared.Items[itemName] and QBCore.Shared.Items[itemName].label) or itemName
                     }, function(rowsAffected)
                         print("^2[DATABASE] Inserted item " .. itemName .. " for store " .. storeType .. " (Rows affected: " .. tostring(rowsAffected) .. ")^7")
                     end)
