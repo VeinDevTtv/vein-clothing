@@ -279,32 +279,8 @@ RegisterNetEvent('vein-clothing:client:openStore', function(data)
         print("^3[vein-clothing] Opening store: " .. storeName .. "^7")
     end
     
-    local storeData = Config.Stores[storeName]
-    
-    if not storeData then
-        QBCore.Functions.Notify("Invalid store data for " .. storeName, "error")
-        return
-    end
-    
-    -- Get store inventory from server
-    QBCore.Functions.TriggerCallback('vein-clothing:server:getStoreInventory', function(inventory)
-        if not inventory then
-            QBCore.Functions.Notify("Failed to load store inventory", "error")
-            return
-        end
-        
-        -- Open store UI
-        SetNuiFocus(true, true)
-        SendNUIMessage({
-            action = "openStore",
-            store = storeName,
-            storeData = storeData,
-            inventory = inventory,
-            playerMoney = PlayerData.money and PlayerData.money.cash or 0,
-            theme = Config.UI and Config.UI.Theme or "default",
-            language = Config.UI and Config.UI.Language or "en"
-        })
-    end, storeName)
+    -- Call the OpenClothingStore function directly instead of doing everything here
+    OpenClothingStore(storeName)
 end)
 
 -- Calculate item price based on rarity and store
@@ -1307,17 +1283,23 @@ function OpenClothingStore(storeType)
             return
         end
         
-        -- Open the UI
-        SendNUIMessage({
-            action = "openStore",
-            store = {
-                type = storeType,
-                label = storeData.label,
-                inventory = inventory
-            }
-        })
-        
-        SetNuiFocus(true, true)
+        -- Get player's clothing and outfits for wardrobe tab
+        QBCore.Functions.TriggerCallback('vein-clothing:server:getPlayerClothing', function(clothing, outfits, wishlist)
+            -- Open the UI with the correct format matching the nui.js expectations
+            SetNuiFocus(true, true)
+            SendNUIMessage({
+                type = "show",
+                inStore = true,
+                inLaundromat = false,
+                inTailor = false,
+                store = storeData,
+                money = PlayerData.money and PlayerData.money.cash or 0,
+                storeItems = inventory,
+                wardrobeItems = clothing or {},
+                wishlistItems = wishlist or {},
+                outfits = outfits or {}
+            })
+        end)
     end, storeType)
 end
 
