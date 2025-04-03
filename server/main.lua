@@ -428,6 +428,7 @@ function RegisterCallbacks()
         local Player = QBCore.Functions.GetPlayer(src)
         
         if not Player then
+            print("^1[ERROR-SERVER] Player not found in getPlayerClothing callback^7")
             cb({}, {}, {})
             return
         end
@@ -436,9 +437,41 @@ function RegisterCallbacks()
         local clothing = {}
         local items = Player.PlayerData.items
         
-        for _, item in pairs(items) do
+        print("^2[DEBUG-SERVER] Checking " .. (items and #items or 0) .. " items in player inventory^7")
+        
+        local itemsChecked = 0
+        local itemsFound = 0
+        local missingClientData = 0
+        
+        for slot, item in pairs(items) do
+            itemsChecked = itemsChecked + 1
+            
+            -- Debug empty slots
+            if item == nil then
+                print("^3[DEBUG-SERVER] Found nil item in slot " .. slot .. "^7")
+                goto continue
+            end
+            
+            -- Additional category debug
+            local hasName = item.name ~= nil
+            local isInSharedItems = QBCore.Shared.Items[item.name] ~= nil
+            local hasClientData = (isInSharedItems and QBCore.Shared.Items[item.name].client ~= nil) or false
+            local hasCategory = (hasClientData and QBCore.Shared.Items[item.name].client.category ~= nil) or false
+            
+            if hasName and not isInSharedItems then
+                print("^1[ERROR-SERVER] Item " .. item.name .. " not found in QBCore.Shared.Items^7")
+            elseif hasName and isInSharedItems and not hasClientData then
+                print("^3[WARNING-SERVER] Item " .. item.name .. " missing client data^7")
+                missingClientData = missingClientData + 1
+            end
+            
             -- Check if it's a clothing item
             if item and item.name and QBCore.Shared.Items[item.name] and QBCore.Shared.Items[item.name].client and QBCore.Shared.Items[item.name].client.category then
+                print("^2[DEBUG-SERVER] Found clothing item: " .. item.name .. " in slot " .. slot .. " with category: " .. QBCore.Shared.Items[item.name].client.category .. "^7")
+                
+                itemsFound = itemsFound + 1
+                
+                -- Add to the clothing array
                 table.insert(clothing, {
                     name = item.name,
                     label = QBCore.Shared.Items[item.name].label,
@@ -448,7 +481,11 @@ function RegisterCallbacks()
                     rarity = QBCore.Shared.Items[item.name].client.rarity or "common"
                 })
             end
+            
+            ::continue::
         end
+        
+        print("^2[DEBUG-SERVER] Checked " .. itemsChecked .. " inventory slots, found " .. itemsFound .. " clothing items, " .. missingClientData .. " items missing client data^7")
         
         -- Get player's outfits
         local citizenid = Player.PlayerData.citizenid

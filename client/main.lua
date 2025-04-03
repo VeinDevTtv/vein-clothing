@@ -1369,6 +1369,20 @@ RegisterNUICallback('purchaseItem', function(data, cb)
                     }
                 })
             end
+            
+            -- Refresh store items to update stock
+            QBCore.Functions.TriggerCallback('vein-clothing:server:getStoreItems', function(storeItems, wishlist)
+                if storeItems then
+                    SendNUIMessage({
+                        type = "updateStoreItems",
+                        items = storeItems
+                    })
+                    
+                    if Config.Debug then
+                        print("^2[vein-clothing] Updated store items after purchase^7")
+                    end
+                end
+            end, currentStore, GetPlayerGender())
         else
             QBCore.Functions.Notify(message, "error")
         end
@@ -1676,16 +1690,29 @@ RegisterNetEvent('vein-clothing:client:openWardrobe', function()
             return
         end
         
-        -- Open NUI with wardrobe data
+        if #clothing == 0 then
+            print("^3[vein-clothing] Warning: No clothing items found in player inventory^7")
+        else
+            print("^2[vein-clothing] Found " .. #clothing .. " clothing items in player inventory^7")
+        end
+        
+        -- Set focus and state variables
         SetNuiFocus(true, true)
+        
+        -- Open NUI with wardrobe data using updated format for consistency
         SendNUIMessage({
-            action = "openWardrobe",
-            wardrobeData = {
-                label = "My Wardrobe",
-                inventory = clothing,
-                outfits = outfits,
-                wishlist = wishlist
-            }
+            type = "show",
+            inStore = false,
+            inLaundromat = false,
+            inTailor = false,
+            wardrobeItems = clothing,
+            outfits = outfits,
+            wishlistItems = wishlist,
+            money = {
+                cash = QBCore.Functions.GetPlayerData().money.cash or 0,
+                bank = QBCore.Functions.GetPlayerData().money.bank or 0
+            },
+            debug = Config.Debug or false
         })
     end)
 end)
