@@ -11,15 +11,14 @@ local CircleZone
 if GetResourceState('PolyZone') ~= 'missing' then
     CircleZone = exports['PolyZone']:CircleZone
 else
-    -- Fallback mock if PolyZone is not available
-    CircleZone = {
-        Create = function(coords, radius, options)
-            return {
-                destroy = function() return end,
-                onPlayerInOut = function(cb) return end
-            }
-        end
-    }
+    -- Create a mock CircleZone implementation if real PolyZone is not available
+    CircleZone = {}
+    CircleZone.Create = function(coords, radius, options)
+        local mockZone = {}
+        mockZone.destroy = function() end
+        mockZone.onPlayerInOut = function(cb) end
+        return mockZone
+    end
 end
 
 -- Global variables for the clothing system
