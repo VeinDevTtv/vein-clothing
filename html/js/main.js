@@ -215,9 +215,91 @@ const app = new Vue({
             // Apply category filter
             if (this.selectedCategory) {
                 items = items.filter(item => {
+                    // Get the category from the item
                     const itemCategory = String(item.category || "").toLowerCase();
                     const selectedCategory = String(this.selectedCategory).toLowerCase();
-                    return itemCategory === selectedCategory;
+                    const itemName = String(item.name || "").toLowerCase();
+                    const itemLabel = String(item.label || "").toLowerCase();
+                    
+                    // Exact match has priority
+                    if (itemCategory === selectedCategory) {
+                        console.log(`Item matched by exact category: ${item.name} - category: ${itemCategory}`);
+                        return true;
+                    }
+                    
+                    // Check name-based category detection
+                    // Match shoes
+                    if (selectedCategory === "shoes" && 
+                        (itemName.includes("shoe") || itemName.includes("boot") || 
+                         itemName.includes("sneaker") || itemLabel.includes("shoe") || 
+                         itemName.includes("footwear"))) {
+                        console.log(`Item matched by name for shoes category: ${item.name}`);
+                        return true;
+                    }
+                    
+                    // Match shirts/tops
+                    if (selectedCategory === "shirts" && 
+                        (itemName.includes("shirt") || itemName.includes("top") || 
+                         itemName.includes("jacket") || itemName.includes("hoodie") || 
+                         itemName.includes("sweater") || itemName.includes("tshirt") || 
+                         itemName.includes("t-shirt") || itemName.includes("t_shirt") || 
+                         itemLabel.includes("shirt"))) {
+                        console.log(`Item matched by name for shirts category: ${item.name}`);
+                        return true;
+                    }
+                    
+                    // Match pants
+                    if (selectedCategory === "pants" && 
+                        (itemName.includes("pant") || itemName.includes("jean") || 
+                         itemName.includes("trouser") || itemName.includes("short") || 
+                         itemName.includes("skirt") || itemLabel.includes("pant"))) {
+                        console.log(`Item matched by name for pants category: ${item.name}`);
+                        return true;
+                    }
+                    
+                    // Match hats
+                    if (selectedCategory === "hats" && 
+                        (itemName.includes("hat") || itemName.includes("cap") || 
+                         itemName.includes("beanie") || itemName.includes("helmet") || 
+                         itemLabel.includes("hat"))) {
+                        console.log(`Item matched by name for hats category: ${item.name}`);
+                        return true;
+                    }
+                    
+                    // Match accessories
+                    if (selectedCategory === "accessories" && 
+                        (itemName.includes("necklace") || itemName.includes("chain") || 
+                         itemName.includes("watch") || itemName.includes("bracelet") || 
+                         itemName.includes("earring") || itemName.includes("ring") || 
+                         itemLabel.includes("accessory") || itemLabel.includes("necklace"))) {
+                        console.log(`Item matched by name for accessories category: ${item.name}`);
+                        return true;
+                    }
+                    
+                    // Match masks
+                    if (selectedCategory === "masks" && 
+                        (itemName.includes("mask") || itemName.includes("bandana") || 
+                         itemName.includes("balaclava") || itemLabel.includes("mask"))) {
+                        console.log(`Item matched by name for masks category: ${item.name}`);
+                        return true;
+                    }
+                    
+                    // Match glasses
+                    if (selectedCategory === "glasses" && 
+                        (itemName.includes("glass") || itemName.includes("eyewear") || 
+                         itemName.includes("sunglass") || itemLabel.includes("glass"))) {
+                        console.log(`Item matched by name for glasses category: ${item.name}`);
+                        return true;
+                    }
+                    
+                    // Check if item's category partly contains or is contained by the selected category
+                    if (itemCategory.includes(selectedCategory) || selectedCategory.includes(itemCategory)) {
+                        console.log(`Item matched by partial category: ${item.name} - ${itemCategory} vs ${selectedCategory}`);
+                        return true;
+                    }
+                    
+                    // No match found
+                    return false;
                 });
                 console.log(`After category filter (${this.selectedCategory}):`, items.length);
                 
@@ -385,9 +467,91 @@ const app = new Vue({
             // Apply category filter
             if (this.selectedCategory) {
                 items = items.filter(item => {
+                    // Get the category from the item
                     const itemCategory = String(item.category || "").toLowerCase();
                     const selectedCategory = String(this.selectedCategory).toLowerCase();
-                    return itemCategory === selectedCategory;
+                    const itemName = String(item.name || "").toLowerCase();
+                    const itemLabel = String(item.label || "").toLowerCase();
+                    
+                    // Exact match has priority
+                    if (itemCategory === selectedCategory) {
+                        console.log(`Wardrobe item matched by exact category: ${item.name} - category: ${itemCategory}`);
+                        return true;
+                    }
+                    
+                    // Check name-based category detection
+                    // Match shoes
+                    if (selectedCategory === "shoes" && 
+                        (itemName.includes("shoe") || itemName.includes("boot") || 
+                         itemName.includes("sneaker") || itemLabel.includes("shoe") || 
+                         itemName.includes("footwear"))) {
+                        console.log(`Wardrobe item matched by name for shoes category: ${item.name}`);
+                        return true;
+                    }
+                    
+                    // Match shirts/tops
+                    if (selectedCategory === "shirts" && 
+                        (itemName.includes("shirt") || itemName.includes("top") || 
+                         itemName.includes("jacket") || itemName.includes("hoodie") || 
+                         itemName.includes("sweater") || itemName.includes("tshirt") || 
+                         itemName.includes("t-shirt") || itemName.includes("t_shirt") || 
+                         itemLabel.includes("shirt"))) {
+                        console.log(`Wardrobe item matched by name for shirts category: ${item.name}`);
+                        return true;
+                    }
+                    
+                    // Match pants
+                    if (selectedCategory === "pants" && 
+                        (itemName.includes("pant") || itemName.includes("jean") || 
+                         itemName.includes("trouser") || itemName.includes("short") || 
+                         itemName.includes("skirt") || itemLabel.includes("pant"))) {
+                        console.log(`Wardrobe item matched by name for pants category: ${item.name}`);
+                        return true;
+                    }
+                    
+                    // Match hats
+                    if (selectedCategory === "hats" && 
+                        (itemName.includes("hat") || itemName.includes("cap") || 
+                         itemName.includes("beanie") || itemName.includes("helmet") || 
+                         itemLabel.includes("hat"))) {
+                        console.log(`Wardrobe item matched by name for hats category: ${item.name}`);
+                        return true;
+                    }
+                    
+                    // Match accessories
+                    if (selectedCategory === "accessories" && 
+                        (itemName.includes("necklace") || itemName.includes("chain") || 
+                         itemName.includes("watch") || itemName.includes("bracelet") || 
+                         itemName.includes("earring") || itemName.includes("ring") || 
+                         itemLabel.includes("accessory") || itemLabel.includes("necklace"))) {
+                        console.log(`Wardrobe item matched by name for accessories category: ${item.name}`);
+                        return true;
+                    }
+                    
+                    // Match masks
+                    if (selectedCategory === "masks" && 
+                        (itemName.includes("mask") || itemName.includes("bandana") || 
+                         itemName.includes("balaclava") || itemLabel.includes("mask"))) {
+                        console.log(`Wardrobe item matched by name for masks category: ${item.name}`);
+                        return true;
+                    }
+                    
+                    // Match glasses
+                    if (selectedCategory === "glasses" && 
+                        (itemName.includes("glass") || itemName.includes("eyewear") || 
+                         itemName.includes("sunglass") || itemLabel.includes("glass"))) {
+                        console.log(`Wardrobe item matched by name for glasses category: ${item.name}`);
+                        return true;
+                    }
+                    
+                    // Check if item's category partly contains or is contained by the selected category
+                    if (itemCategory.includes(selectedCategory) || selectedCategory.includes(itemCategory)) {
+                        console.log(`Wardrobe item matched by partial category: ${item.name} - ${itemCategory} vs ${selectedCategory}`);
+                        return true;
+                    }
+                    
+                    // No match found
+                    return false;
                 });
                 console.log(`After wardrobe category filter (${this.selectedCategory}):`, items.length);
                 
