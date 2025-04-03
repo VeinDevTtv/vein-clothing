@@ -156,18 +156,24 @@ function LoadStoreStockFromDatabase()
                         if row.last_restock then
                             lastRestock = os.time() -- Default fallback
                             
-                            -- Try to parse the timestamp string
-                            local pattern = "(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)"
-                            local year, month, day, hour, min, sec = row.last_restock:match(pattern)
-                            if year then
-                                lastRestock = os.time({
-                                    year = tonumber(year),
-                                    month = tonumber(month),
-                                    day = tonumber(day),
-                                    hour = tonumber(hour),
-                                    min = tonumber(min),
-                                    sec = tonumber(sec)
-                                })
+                            -- Check if last_restock is a string or a number
+                            if type(row.last_restock) == "string" then
+                                -- Try to parse the timestamp string
+                                local pattern = "(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)"
+                                local year, month, day, hour, min, sec = row.last_restock:match(pattern)
+                                if year then
+                                    lastRestock = os.time({
+                                        year = tonumber(year),
+                                        month = tonumber(month),
+                                        day = tonumber(day),
+                                        hour = tonumber(hour),
+                                        min = tonumber(min),
+                                        sec = tonumber(sec)
+                                    })
+                                end
+                            elseif type(row.last_restock) == "number" then
+                                -- If it's already a number (UNIX timestamp), use it directly
+                                lastRestock = row.last_restock
                             end
                         end
                         
@@ -206,7 +212,7 @@ function SaveStoreStockToDatabase()
                     storeType,
                     itemName,
                     stockData.stock,
-                    os.date('%Y-%m-%d %H:%M:%S', stockData.lastRestock or os.time())
+                    type(stockData.lastRestock) == "number" and os.date('%Y-%m-%d %H:%M:%S', stockData.lastRestock) or os.date('%Y-%m-%d %H:%M:%S', os.time())
                 })
             end
         end
@@ -913,10 +919,32 @@ function RestockStore(storeType)
         
         local restockAmount = math.random(minRestock, maxRestock)
         stockData.stock = math.min(stockData.stock + restockAmount, stockData.maxStock)
-        stockData.lastRestock = os.time()
+        stockData.lastRestock = os.time() -- Ensure this is a number (UNIX timestamp)
+        
+        -- Update database with restock
+        MySQL.Async.execute('UPDATE store_inventory SET stock = ?, last_restock = ? WHERE store = ? AND item = ?', {
+            stockData.stock,
+            os.date('%Y-%m-%d %H:%M:%S', stockData.lastRestock),
+            storeType,
+            itemName
+        }, function(rowsChanged)
+            if rowsChanged == 0 then
+                -- Record doesn't exist yet, create it
+                MySQL.Async.execute('INSERT INTO store_inventory (store, item, stock, last_restock) VALUES (?, ?, ?, ?)', {
+                    storeType,
+                    itemName,
+                    stockData.stock,
+                    os.date('%Y-%m-%d %H:%M:%S', stockData.lastRestock)
+                })
+            end
+        end)
     end
     
     NeedsRestock[storeType] = false
+    
+    if Config.Debug then
+        print("^2[INFO] Restocked store: " .. storeType .. "^7")
+    end
 end
 
 -- Restock stores
@@ -970,12 +998,8 @@ function RestockStores()
                             StoreStock[storeType][itemName].maxStock
                         )
                         
-                        -- Save to database
-                        MySQL.Async.execute('UPDATE store_inventory SET stock = ? WHERE store = ? AND item = ?', {
-                            StoreStock[storeType][itemName].stock,
-                            storeType,
-                            itemName
-                        })
+                        -- Update lastRestock time
+                        StoreStock[storeType][itemName].lastRestock = os.time()
                         
                         restocked = restocked + 1
                     end
@@ -1005,12 +1029,8 @@ function RestockStores()
                                 StoreStock[storeType][itemName].maxStock
                             )
                             
-                            -- Save to database
-                            MySQL.Async.execute('UPDATE store_inventory SET stock = ? WHERE store = ? AND item = ?', {
-                                StoreStock[storeType][itemName].stock,
-                                storeType,
-                                itemName
-                            })
+                            -- Update lastRestock time
+                            StoreStock[storeType][itemName].lastRestock = os.time()
                             
                             restocked = restocked + 1
                         end
@@ -1160,7 +1180,7 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
                     storeType,
                     itemName,
                     StoreStock[storeType][itemName].stock,
-                    os.date('%Y-%m-%d %H:%M:%S', StoreStock[storeType][itemName].lastRestock or os.time())
+                    type(StoreStock[storeType][itemName].lastRestock) == "number" and os.date('%Y-%m-%d %H:%M:%S', StoreStock[storeType][itemName].lastRestock) or os.date('%Y-%m-%d %H:%M:%S', os.time())
                 })
             end
         end)

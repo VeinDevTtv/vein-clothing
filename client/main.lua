@@ -1237,9 +1237,9 @@ function OpenClothingStore(storeName)
         })
         
         -- Double-check the money values after a small delay to ensure they're accurate
-        --Citizen.SetTimeout(200, function()
-        --    UpdateMoneyDisplay()
-        --end)
+        Citizen.SetTimeout(200, function()
+            UpdateMoneyDisplay()
+        end)
         
         -- Verify UI state after brief delay
         Citizen.SetTimeout(500, function()
@@ -2356,17 +2356,31 @@ end)
 function UpdateMoneyDisplay()
     local playerData = QBCore.Functions.GetPlayerData()
     if playerData and playerData.money then
+        -- Create money object with defaults
+        local moneyObj = {
+            cash = playerData.money.cash or 0,
+            bank = playerData.money.bank or 0
+        }
+        
+        -- Update global player money if needed for reference elsewhere
+        playerMoney = {
+            cash = moneyObj.cash,
+            bank = moneyObj.bank
+        }
+        
+        -- Send to UI
         SendNUIMessage({
             type = "updateMoney",
-            money = {
-                cash = playerData.money.cash or 0,
-                bank = playerData.money.bank or 0
-            }
+            money = moneyObj
         })
         
         if Config.Debug then
-            print("^2[vein-clothing] Updated money display: Cash $" .. tostring(playerData.money.cash) .. 
-                  ", Bank $" .. tostring(playerData.money.bank) .. "^7")
+            print("^2[vein-clothing] Updated money display: Cash $" .. tostring(moneyObj.cash) .. 
+                  ", Bank $" .. tostring(moneyObj.bank) .. "^7")
+        end
+    else
+        if Config.Debug then
+            print("^1[vein-clothing] Unable to update money display: Invalid player data^7")
         end
     end
 end
