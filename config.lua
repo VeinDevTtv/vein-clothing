@@ -64,7 +64,7 @@ Config.Stores = {
             label = "Suburban Clothing" -- Blip label
         },
         clerk = {
-            model = "a_f_y_hipster_02", -- Ped model for the store clerk
+            model = "s_f_y_shop_mid", -- Updated to a more common store clerk model
             scenario = "WORLD_HUMAN_STAND_IMPATIENT" -- Ped animation
         },
         priceMultiplier = 1.0, -- Price multiplier for this store (1.0 = normal price)

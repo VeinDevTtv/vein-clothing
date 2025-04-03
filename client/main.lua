@@ -15,8 +15,8 @@ else
     CircleZone = {
         Create = function(coords, radius, options)
             return {
-                destroy = function() end,
-                onPlayerInOut = function(cb) end
+                destroy = function() return end,
+                onPlayerInOut = function(cb) return end
             }
         end
     }
@@ -832,12 +832,38 @@ function Initialize()
         end
     end
     
+    -- Check if qb-target is available when UseTarget is enabled
+    if Config.UseTarget then
+        if not exports['qb-target'] then
+            print("^1[vein-clothing] ERROR: Config.UseTarget is enabled but qb-target resource is not available^7")
+            print("^1[vein-clothing] Please ensure qb-target is started before this resource^7")
+            Config.UseTarget = false
+            print("^3[vein-clothing] Falling back to non-target mode^7")
+        else
+            print("^2[vein-clothing] qb-target detected, target integration enabled^7")
+        end
+    end
+    
     -- Load various components in the correct order
-    LoadStores()       -- This creates store clerks with qb-target
-    LoadLaundromats()
-    LoadTailors()
-    LoadPlayerOutfit()
-    StartConditionMonitoring()
+    Citizen.CreateThread(function()
+        -- Give the server a moment to initialize
+        Citizen.Wait(1000)
+        
+        print("^3[vein-clothing] Loading stores...^7")
+        LoadStores()       -- This creates store clerks with qb-target
+        
+        print("^3[vein-clothing] Loading laundromats...^7")
+        LoadLaundromats()
+        
+        print("^3[vein-clothing] Loading tailors...^7")
+        LoadTailors()
+        
+        print("^3[vein-clothing] Loading player outfit...^7")
+        LoadPlayerOutfit()
+        
+        print("^3[vein-clothing] Starting condition monitoring...^7")
+        StartConditionMonitoring()
+    end)
     
     -- Export the config for other resources to use
     exports('GetClothingConfig', function()
@@ -913,80 +939,115 @@ function LoadStores()
             EndTextCommandSetBlipName(blip)
             
             -- Create store clerk NPC
-            local model = GetHashKey(storeData.clerk.model)
-            RequestModel(model)
-            while not HasModelLoaded(model) do
-                Wait(1)
+            local modelName = storeData.clerk.model
+            local modelHash = GetHashKey(modelName)
+            
+            if Config.Debug then
+                print("^3[vein-clothing] Attempting to load model: " .. modelName .. " (Hash: " .. modelHash .. ")^7")
             end
             
-            local npc = CreatePed(4, model, location.x, location.y, location.z - 1.0, location.w, false, true)
-            FreezeEntityPosition(npc, true)
-            SetEntityInvincible(npc, true)
-            SetBlockingOfNonTemporaryEvents(npc, true)
+            RequestModel(modelHash)
             
-            -- Apply animation
-            TaskStartScenarioInPlace(npc, storeData.clerk.scenario, 0, true)
+            local timeout = 0
+            -- Wait for model to load with timeout
+            while not HasModelLoaded(modelHash) and timeout < 30 do
+                Wait(100)
+                timeout = timeout + 1
+                if Config.Debug and timeout % 10 == 0 then
+                    print("^3[vein-clothing] Still waiting for model to load: " .. modelName .. " (Attempt " .. timeout .. "/30)^7")
+                end
+            end
             
-            -- Store reference to NPC
-            table.insert(storeNPCs, {
-                handle = npc, 
-                type = storeType, 
-                index = i,
-                location = location
-            })
-            
-            -- Add target interaction if enabled
-            if Config.UseTarget then
+            if HasModelLoaded(modelHash) then
                 if Config.Debug then
-                    print("^3[vein-clothing] Adding qb-target to clerk NPC^7")
+                    print("^3[vein-clothing] Model loaded successfully: " .. modelName .. "^7")
                 end
                 
-                exports['qb-target']:AddTargetEntity(npc, {
-                    options = {
-                        {
-                            type = "client",
-                            event = "vein-clothing:client:openStore",
-                            icon = "fas fa-tshirt",
-                            label = "Browse " .. storeData.label,
-                            args = {
-                                store = storeType
-                            }
-                        }
-                    },
-                    distance = Config.PlayerInteraction.MaxDistance
-                })
-            else
-                -- Create interaction zone if not using target
-                if CircleZone then
-                    local zone = CircleZone:Create(
-                        vector3(location.x, location.y, location.z), 
-                        3.0, 
-                        {
-                            name = storeType .. "_" .. i,
-                            debugPoly = Config.Debug,
-                            useZ = true
-                        }
-                    )
+                local npc = CreatePed(4, modelHash, location.x, location.y, location.z - 1.0, location.w, false, true)
+                
+                if DoesEntityExist(npc) then
+                    if Config.Debug then
+                        print("^3[vein-clothing] NPC created successfully at location: " .. 
+                            location.x .. ", " .. location.y .. ", " .. location.z .. "^7")
+                    end
                     
-                    zone:onPlayerInOut(function(isPointInside)
-                        if isPointInside then
-                            isInClothingStore = true
-                            currentStore = storeType
-                            QBCore.Functions.Notify("Press [E] to browse " .. storeData.label, 'primary', 5000)
-                        else
-                            if currentStore == storeType then
-                                isInClothingStore = false
-                                currentStore = nil
-                            end
+                    FreezeEntityPosition(npc, true)
+                    SetEntityInvincible(npc, true)
+                    SetBlockingOfNonTemporaryEvents(npc, true)
+                    
+                    -- Apply animation
+                    TaskStartScenarioInPlace(npc, storeData.clerk.scenario, 0, true)
+                    
+                    -- Store reference to NPC
+                    table.insert(storeNPCs, {
+                        handle = npc, 
+                        type = storeType, 
+                        index = i,
+                        location = location
+                    })
+                    
+                    -- Add target interaction if enabled
+                    if Config.UseTarget then
+                        if Config.Debug then
+                            print("^3[vein-clothing] Adding qb-target to clerk NPC^7")
                         end
-                    end)
-                    
-                    table.insert(storeZones, zone)
+                        
+                        exports['qb-target']:AddTargetEntity(npc, {
+                            options = {
+                                {
+                                    type = "client",
+                                    event = "vein-clothing:client:openStore",
+                                    icon = "fas fa-tshirt",
+                                    label = "Browse " .. storeData.label,
+                                    args = {
+                                        store = storeType
+                                    }
+                                }
+                            },
+                            distance = Config.PlayerInteraction.MaxDistance
+                        })
+                    else
+                        -- Create interaction zone if not using target
+                        if CircleZone then
+                            local zone = CircleZone:Create(
+                                vector3(location.x, location.y, location.z), 
+                                3.0, 
+                                {
+                                    name = storeType .. "_" .. i,
+                                    debugPoly = Config.Debug,
+                                    useZ = true
+                                }
+                            )
+                            
+                            zone:onPlayerInOut(function(isPointInside)
+                                if isPointInside then
+                                    isInClothingStore = true
+                                    currentStore = storeType
+                                    QBCore.Functions.Notify("Press [E] to browse " .. storeData.label, 'primary', 5000)
+                                else
+                                    if currentStore == storeType then
+                                        isInClothingStore = false
+                                        currentStore = nil
+                                    end
+                                end
+                            end)
+                            
+                            table.insert(storeZones, zone)
+                        end
+                    end
+                else
+                    if Config.Debug then
+                        print("^1[vein-clothing] ERROR: Failed to create NPC for model: " .. modelName .. "^7")
+                    end
+                end
+            else
+                if Config.Debug then
+                    print("^1[vein-clothing] ERROR: Failed to load model: " .. modelName .. "^7")
                 end
             end
             
             -- Clean up model
-            SetModelAsNoLongerNeeded(model)
+            SetModelAsNoLongerNeeded(modelHash)
         end
     end
     
