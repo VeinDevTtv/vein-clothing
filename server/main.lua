@@ -705,26 +705,23 @@ function RegisterCallbacks()
             if hasCategory then
                 local itemInfo = QBCore.Shared.Items[item.name]
                 
-                -- Format for UI
+                -- Add to clothing list
                 local formattedItem = {
                     name = item.name,
-                    label = itemInfo.label,
-                    description = itemInfo.description or "",
+                    label = QBCore.Shared.Items[item.name].label,
+                    description = QBCore.Shared.Items[item.name].description or "A clothing item.",
                     slot = slot,
-                    count = item.amount,
-                    info = item.info or {},
-                    rarity = (itemInfo.client and itemInfo.client.rarity) or "common",
-                    category = (itemInfo.client and itemInfo.client.category) or "shirts",
-                    component = (itemInfo.client and itemInfo.client.component) or 11
+                    category = QBCore.Shared.Items[item.name].client.category,
+                    subcategory = QBCore.Shared.Items[item.name].client.subcategory or "general",
+                    color = QBCore.Shared.Items[item.name].client.color or "neutral",
+                    component = QBCore.Shared.Items[item.name].client.component,
+                    drawable = QBCore.Shared.Items[item.name].client.drawable,
+                    texture = QBCore.Shared.Items[item.name].client.texture,
+                    variations = QBCore.Shared.Items[item.name].client.variations or {},
+                    rarity = QBCore.Shared.Items[item.name].client.rarity or "common",
+                    worn = currentlyWorn[QBCore.Shared.Items[item.name].client.component] == item.name
                 }
                 
-                -- Add texture/drawable info if available
-                if itemInfo.client then
-                    formattedItem.drawable = itemInfo.client.drawable
-                    formattedItem.texture = itemInfo.client.texture
-                end
-                
-                -- Add condition info if available
                 if item.info and item.info.condition then
                     formattedItem.condition = item.info.condition
                 else
