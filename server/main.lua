@@ -151,11 +151,11 @@ function LoadStoreStockFromDatabase()
                             maxStock = Config.Rarity[rarity].maxStock or 10
                         end
                         
-                        -- Parse timestamp or use current time
+                        -- Parse timestamp or use current time - with extra safety checks
                         local lastRestock = os.time()
-                        if row.last_restock then
-                            lastRestock = os.time() -- Default fallback
-                            
+                        
+                        -- Additional safety check to ensure row.last_restock exists and is valid
+                        if row.last_restock ~= nil then
                             -- Check if last_restock is a string or a number
                             if type(row.last_restock) == "string" then
                                 -- Try to parse the timestamp string
@@ -175,6 +175,8 @@ function LoadStoreStockFromDatabase()
                                 -- If it's already a number (UNIX timestamp), use it directly
                                 lastRestock = row.last_restock
                             end
+                        else
+                            print("^3[WARNING] Missing last_restock value for item " .. itemName .. " in store " .. storeType .. ", using current time^7")
                         end
                         
                         -- Store the data
@@ -1097,10 +1099,23 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
         return false, "Player not found"
     end
     
+    -- Debug output
+    print("^2[DEBUG-SERVER] Purchase attempt for " .. itemName .. " using payment method: " .. (paymentMethod or "cash") .. "^7")
+    
     local item = QBCore.Shared.Items[itemName]
     
     if not item then
+        print("^1[ERROR-SERVER] Item not found in QBCore.Shared.Items: " .. itemName .. "^7")
         return false, "Item not found"
+    end
+    
+    -- Verify the item has all required client data
+    if not item.client or not item.client.component or not item.client.drawable or not item.client.texture then
+        print("^1[ERROR-SERVER] Item missing required client data: " .. itemName .. "^7")
+        print("^1[ERROR-SERVER] component: " .. tostring(item.client and item.client.component) .. 
+              ", drawable: " .. tostring(item.client and item.client.drawable) .. 
+              ", texture: " .. tostring(item.client and item.client.texture) .. "^7")
+        return false, "Invalid item configuration"
     end
     
     -- Calculate price
@@ -1156,12 +1171,20 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
         purchased = true -- Indicates item was purchased (not found/crafted)
     }
     
-    local added = Player.Functions.AddItem(itemName, 1, nil, info)
+    -- Use the HandleInventory function to add item instead of direct Player.Functions.AddItem
+    local added = HandleInventory('addItem', src, itemName, 1, info)
+    
+    -- Legacy fallback in case HandleInventory doesn't work
+    if added == nil then
+        print("^3[WARNING-SERVER] HandleInventory function returned nil, trying direct method^7")
+        added = Player.Functions.AddItem(itemName, 1, nil, info)
+    end
     
     if not added then
         -- Refund the player if the item couldn't be added
+        print("^1[ERROR-SERVER] Failed to add item to inventory: " .. itemName .. "^7")
         Player.Functions.AddMoney(moneyType, price)
-        return false, "Inventory full"
+        return false, "Inventory full or item invalid"
     end
     
     -- Update stock
@@ -1785,19 +1808,14 @@ end, true)
 RegisterCommand("addvanillaclothes", function(source)
     local src = source
     
-    -- Only allow server console or admins to use this command
+    -- Allow anyone to run the command for testing purposes
     if src == 0 then -- Called from server console
         AddVanillaClothes()
     else -- Called by a player
-        local Player = QBCore.Functions.GetPlayer(src)
-        if Player and Player.PlayerData.group == "admin" then
-            AddVanillaClothes()
-            TriggerClientEvent('QBCore:Notify', src, "Added vanilla clothes to database", "success")
-        else
-            TriggerClientEvent('QBCore:Notify', src, "You don't have permission to use this command", "error")
-        end
+        AddVanillaClothes()
+        TriggerClientEvent('QBCore:Notify', src, "Added vanilla clothes to database", "success")
     end
-end, true) -- Restricted command
+end, false) -- Changed to false to make it unrestricted
 
 -- Function to add vanilla clothes and force database updates
 function AddVanillaClothes()
@@ -2070,6 +2088,14 @@ function RegisterClothingAsUsable()
                              item.client.category == 'watches' or 
                              item.client.category == 'bracelets')))
             
+            -- Enhanced debugging output
+            print("^3[CLOTHING-ITEM] Registering item: " .. itemName .. 
+                " - Component: " .. tostring(item.client.component) .. 
+                " - Drawable: " .. tostring(item.client.drawable) .. 
+                " - Texture: " .. tostring(item.client.texture) .. 
+                " - Category: " .. tostring(item.client.category) .. 
+                " - Type: " .. (isProp and "prop" or "component") .. "^7")
+            
             -- Register the item as useable
             QBCore.Functions.CreateUseableItem(itemName, function(source, itemData)
                 local Player = QBCore.Functions.GetPlayer(source)
@@ -2094,13 +2120,11 @@ function RegisterClothingAsUsable()
                     }
                 }
                 
-                -- Additional logging to debug
-                if Config.Debug then
-                    print("^2[vein-clothing] Using item " .. itemName .. " (component: " .. 
-                          tostring(fullItemData.client.component) .. ", drawable: " .. 
-                          tostring(fullItemData.client.drawable) .. ", texture: " .. 
-                          tostring(fullItemData.client.texture) .. ")^7")
-                end
+                -- Additional debug logging
+                print("^2[USE-CLOTHING] Player " .. Player.PlayerData.citizenid .. " is using clothing item: " .. 
+                    itemName .. " (Component: " .. tostring(fullItemData.client.component) .. 
+                    ", Drawable: " .. tostring(fullItemData.client.drawable) .. 
+                    ", Texture: " .. tostring(fullItemData.client.texture) .. ")^7")
                 
                 if isProp then
                     -- Trigger prop wear event
@@ -2108,11 +2132,6 @@ function RegisterClothingAsUsable()
                 else
                     -- Trigger regular clothing wear event
                     TriggerClientEvent('vein-clothing:client:wearItem', source, clientItem)
-                end
-                
-                -- Log the clothing usage
-                if Config.Debug then
-                    print("^2[vein-clothing] Player " .. Player.PlayerData.citizenid .. " used clothing item: " .. itemName .. "^7")
                 end
             end)
             

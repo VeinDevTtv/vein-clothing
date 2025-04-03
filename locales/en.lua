@@ -18,7 +18,8 @@ local Translations = {
         buyer_not_enough = "Buyer doesn't have enough money",
         offer_declined = "Offer declined",
         sale_failed = "Sale failed - %s",
-        out_of_stock = "Item out of stock"
+        out_of_stock = "Item out of stock",
+        invalid_data = "Invalid data received"
     },
     success = {
         purchased = "Purchased %s",

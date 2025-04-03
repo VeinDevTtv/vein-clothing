@@ -1213,6 +1213,17 @@ function OpenClothingStore(storeName)
             items = fallbackItems
         end
         
+        -- Debug output to see what items we're getting from the server
+        print("^2[STORE-DEBUG] ==========================================^7")
+        print("^2[STORE-DEBUG] Received " .. #items .. " items from server^7")
+        for i, item in ipairs(items) do
+            print("^2[STORE-DEBUG] Item " .. i .. ": " .. item.name .. " - Label: " .. item.label .. 
+                  " - Category: " .. (item.category or "unknown") .. " - Price: " .. item.price .. 
+                  " - Stock: " .. item.stock .. " - Drawable: " .. tostring(item.drawable) .. 
+                  " - Texture: " .. tostring(item.texture) .. " - Component: " .. tostring(item.component) .. "^7")
+        end
+        print("^2[STORE-DEBUG] ==========================================^7")
+        
         print("^2[vein-clothing] Received " .. #items .. " items from server, opening UI...^7")
         
         -- Set focus and state variables
@@ -1816,30 +1827,39 @@ RegisterNetEvent('vein-clothing:client:openWardrobe', function()
     if inWardrobe then return end
     inWardrobe = true
     
+    print("^2[WARDROBE-DEBUG] Opening wardrobe...^7")
+    
     -- Get player's owned clothing and saved outfits
     QBCore.Functions.TriggerCallback('vein-clothing:server:getPlayerClothing', function(clothing, outfits, wishlist)
         if not clothing then
+            print("^1[WARDROBE-ERROR] Failed to get clothing data from server^7")
             QBCore.Functions.Notify("Failed to load wardrobe", "error")
             inWardrobe = false
             return
         end
         
+        print("^2[WARDROBE-DEBUG] ==========================================^7")
         if #clothing == 0 then
-            print("^3[vein-clothing] Warning: No clothing items found in player inventory^7")
+            print("^3[WARDROBE-DEBUG] Warning: No clothing items found in player inventory^7")
         else
-            print("^2[vein-clothing] Found " .. #clothing .. " clothing items in player inventory^7")
+            print("^2[WARDROBE-DEBUG] Found " .. #clothing .. " clothing items in player inventory^7")
             for i, item in ipairs(clothing) do
-                print("^2[vein-clothing] Wardrobe item: " .. i .. " - " .. item.name .. " (category: " .. item.category .. ")^7")
+                print("^2[WARDROBE-DEBUG] Item " .. i .. ": " .. item.name .. 
+                    " - Category: " .. (item.category or "unknown") .. 
+                    " - Component: " .. tostring(item.component) .. 
+                    " - Drawable: " .. tostring(item.drawable) .. 
+                    " - Texture: " .. tostring(item.texture) .. "^7")
             end
         end
+        print("^2[WARDROBE-DEBUG] ==========================================^7")
         
         -- Set focus and state variables
         SetNuiFocus(true, true)
         
         -- Open NUI with wardrobe data using updated format for consistency
+        print("^2[WARDROBE-DEBUG] Sending wardrobe data to UI...^7")
         SendNUIMessage({
             type = "show",
-            action = "openWardrobe",
             inStore = false,
             inWardrobe = true,
             inLaundromat = false,
@@ -1853,6 +1873,8 @@ RegisterNetEvent('vein-clothing:client:openWardrobe', function()
             },
             debug = Config.Debug or false
         })
+        
+        print("^2[WARDROBE-DEBUG] Wardrobe UI should now be visible^7")
     end)
 end)
 
@@ -2454,31 +2476,16 @@ end)
 function UpdateMoneyDisplay()
     local playerData = QBCore.Functions.GetPlayerData()
     if playerData and playerData.money then
-        -- Create money object with defaults
-        local moneyObj = {
-            cash = playerData.money.cash or 0,
-            bank = playerData.money.bank or 0
-        }
-        
-        -- Update global player money if needed for reference elsewhere
-        playerMoney = {
-            cash = moneyObj.cash,
-            bank = moneyObj.bank
-        }
-        
-        -- Send to UI
         SendNUIMessage({
             type = "updateMoney",
-            money = moneyObj
+            money = {
+                cash = playerData.money.cash or 0,
+                bank = playerData.money.bank or 0
+            }
         })
         
         if Config.Debug then
-            print("^2[vein-clothing] Updated money display: Cash $" .. tostring(moneyObj.cash) .. 
-                  ", Bank $" .. tostring(moneyObj.bank) .. "^7")
-        end
-    else
-        if Config.Debug then
-            print("^1[vein-clothing] Unable to update money display: Invalid player data^7")
+            print("^2[vein-clothing] Updated money display in UI. Cash: $" .. (playerData.money.cash or 0) .. ", Bank: $" .. (playerData.money.bank or 0) .. "^7")
         end
     end
 end
