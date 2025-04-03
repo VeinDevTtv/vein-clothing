@@ -196,14 +196,18 @@ end
 
 -- Create a safe CircleZone that handles errors gracefully
 function CreateSafeCircleZone(coords, radius, options)
-    -- Validate and sanitize coordinates
-    if not coords or not AreValidCoords(coords.x, coords.y, coords.z) then
-        print("^3[WARNING] Invalid coords in CreateSafeCircleZone. Using fallback coords.^7")
-        coords = vector3(0.0, 0.0, 0.0)
+    -- Ensure coords is a vector3 or convert it
+    if type(coords) ~= "vector3" then
+        if type(coords) == "table" and coords.x ~= nil and coords.y ~= nil then
+            coords = vector3(coords.x, coords.y, coords.z or 0.0)
+        else
+            print("^3[WARNING] Invalid coords in CreateSafeCircleZone. Using fallback coords.^7")
+            coords = vector3(0.0, 0.0, 0.0)
+        end
     end
     
     -- Validate and sanitize radius
-    if not radius or radius <= 0 then
+    if not radius or type(radius) ~= "number" or radius <= 0 then
         print("^3[WARNING] Invalid radius in CreateSafeCircleZone. Using fallback radius.^7")
         radius = 3.0 -- Default radius
     end
@@ -211,25 +215,36 @@ function CreateSafeCircleZone(coords, radius, options)
     -- Validate options
     options = options or {}
     
-    -- Extract coordinates as numbers
-    local x, y, z = coords.x, coords.y, coords.z
+    -- Safe check for validity of vector3 values
+    if not coords or coords.x == nil or coords.y == nil or coords.z == nil then
+        print("^3[WARNING] Corrupted vector3 in CreateSafeCircleZone. Using fallback coords.^7")
+        coords = vector3(0.0, 0.0, 0.0)
+    end
     
-    -- Use pcall to safely create the zone
-    local success, zone = pcall(function()
-        if CircleZone.new then
-            return CircleZone.new(coords, radius, options)
-        elseif CircleZone then
-            return CircleZone(coords, radius, options)
-        else
-            return nil
+    -- Use pcall to safely create the zone with different potential methods
+    local CircleZoneCall = function()
+        if CircleZone then
+            if type(CircleZone) == "table" and CircleZone.new then
+                -- Standard PolyZone CircleZone object
+                return CircleZone.new(coords, radius, options)
+            elseif type(CircleZone) == "function" then
+                -- Function form
+                return CircleZone(coords, radius, options)
+            else
+                -- Direct call form
+                return CircleZone(coords, radius, options)
+            end
         end
-    end)
+        return nil
+    end
+    
+    local success, zone = pcall(CircleZoneCall)
     
     if success and zone then
         return zone
     end
     
-    print("^3[WARNING] Failed to create CircleZone: " .. tostring(success) .. ". Using local implementation.^7")
+    print("^3[WARNING] Failed to create CircleZone. Using local implementation.^7")
     
     -- Fallback local implementation
     return {
@@ -256,7 +271,35 @@ end
 
 -- Export the function with more robust error handling
 exports('CreateSafeCircleZone', function(coords, radius, options)
-    -- Simplified export with direct parameters to avoid the issue with "..." unpacking
+    -- Ensure coords is a vector3
+    if type(coords) ~= "vector3" then
+        if type(coords) == "table" and coords.x ~= nil and coords.y ~= nil then
+            -- Convert table to vector3
+            coords = vector3(coords.x, coords.y, coords.z or 0.0)
+        elseif type(coords) == "number" then
+            -- If someone passes individual numbers, try to get radius and options from other positions
+            local x, y, z = coords, radius, options
+            radius = z -- Third parameter becomes options
+            options = {}
+            coords = vector3(x, y, 0.0)
+        else
+            print("^1[ERROR] Invalid coords type in CreateSafeCircleZone export: " .. type(coords) .. "^7")
+            coords = vector3(0.0, 0.0, 0.0)
+        end
+    end
+    
+    -- Make sure radius is a number
+    if type(radius) ~= "number" or radius <= 0 then
+        print("^1[ERROR] Invalid radius in CreateSafeCircleZone export: " .. tostring(radius) .. "^7")
+        radius = 3.0
+    end
+    
+    -- Ensure options is a table
+    if type(options) ~= "table" then
+        options = {}
+    end
+    
+    -- Call the function with sanitized parameters
     local success, result = pcall(function()
         return CreateSafeCircleZone(coords, radius, options)
     end)
