@@ -1401,16 +1401,35 @@ function RegisterMissingItem(itemName)
     local foundItem = nil
     local gender = nil
     
+    -- Helper function to find an item in the nested structure
+    local function findItemInConfig(gender, itemName)
+        if not Config.VanillaClothes or not Config.VanillaClothes[gender] then
+            return nil
+        end
+        
+        for category, items in pairs(Config.VanillaClothes[gender]) do
+            for _, item in ipairs(items) do
+                if item.name == itemName then
+                    return item
+                end
+            end
+        end
+        
+        return nil
+    end
+    
     -- Check male items
-    if Config.VanillaClothes and Config.VanillaClothes.Male and Config.VanillaClothes.Male[itemName] then
-        foundItem = Config.VanillaClothes.Male[itemName]
+    foundItem = findItemInConfig("male", itemName)
+    if foundItem then
         gender = "male"
     end
     
     -- Check female items
-    if not foundItem and Config.VanillaClothes and Config.VanillaClothes.Female and Config.VanillaClothes.Female[itemName] then
-        foundItem = Config.VanillaClothes.Female[itemName]
-        gender = "female"
+    if not foundItem then
+        foundItem = findItemInConfig("female", itemName)
+        if foundItem then
+            gender = "female"
+        end
     end
     
     if foundItem then
@@ -2192,25 +2211,44 @@ function AddVanillaClothes()
     
     print("^2[vein-clothing] Starting vanilla clothes population...^7")
     
-    -- Register male items
+    -- Process male items
     print("^3[INFO] Registering male clothing items...^7")
-    for name, item in pairs(Config.VanillaClothes.Male) do
-        -- Make sure to use local RegisterSharedItem from the file, not our local definition
-        if RegisterSharedItem(name, item.label, item.description, item.weight or 0.1) then
-            addedItems = addedItems + 1
-        else
-            print("^3[INFO] Item " .. name .. " already exists in QBCore.Shared.Items^7")
+    if Config.VanillaClothes and Config.VanillaClothes.male then
+        -- Loop through each category (tops, pants, etc.)
+        for category, items in pairs(Config.VanillaClothes.male) do
+            -- Loop through items in this category
+            for _, item in ipairs(items) do
+                if item.name then
+                    if RegisterSharedItem(item.name, item.label, item.description, item.weight or 0.1) then
+                        addedItems = addedItems + 1
+                    else
+                        print("^3[INFO] Item " .. item.name .. " already exists in QBCore.Shared.Items^7")
+                    end
+                end
+            end
         end
+    else
+        print("^1[ERROR] Config.VanillaClothes.male not found or not properly structured^7")
     end
     
-    -- Register female items
+    -- Process female items
     print("^3[INFO] Registering female clothing items...^7")
-    for name, item in pairs(Config.VanillaClothes.Female) do
-        if RegisterSharedItem(name, item.label, item.description, item.weight or 0.1) then
-            addedItems = addedItems + 1
-        else
-            print("^3[INFO] Item " .. name .. " already exists in QBCore.Shared.Items^7")
+    if Config.VanillaClothes and Config.VanillaClothes.female then
+        -- Loop through each category (tops, pants, etc.)
+        for category, items in pairs(Config.VanillaClothes.female) do
+            -- Loop through items in this category
+            for _, item in ipairs(items) do
+                if item.name then
+                    if RegisterSharedItem(item.name, item.label, item.description, item.weight or 0.1) then
+                        addedItems = addedItems + 1
+                    else
+                        print("^3[INFO] Item " .. item.name .. " already exists in QBCore.Shared.Items^7")
+                    end
+                end
+            end
         end
+    else
+        print("^1[ERROR] Config.VanillaClothes.female not found or not properly structured^7")
     end
     
     print("^2[SUCCESS] Registered " .. tostring(addedItems) .. " vanilla clothing items^7")
@@ -2221,15 +2259,32 @@ function AddVanillaClothes()
     -- Now populate store inventories
     print("^3[INFO] Now populating store inventories with vanilla clothing...^7")
     
+    -- Helper function to find an item by name in the vanilla clothes config
+    local function findVanillaItem(gender, itemName)
+        if not Config.VanillaClothes or not Config.VanillaClothes[gender] then
+            return nil
+        end
+        
+        for category, items in pairs(Config.VanillaClothes[gender]) do
+            for _, item in ipairs(items) do
+                if item.name == itemName then
+                    return item
+                end
+            end
+        end
+        
+        return nil
+    end
+    
     -- Populate suburban
     if Config.Stores and Config.Stores.suburban then
         print("^3[INFO] Adding items to store: suburban^7")
         
         -- Add male items
         for _, itemName in ipairs(Config.Stores.suburban.items.male) do
-            if Config.VanillaClothes.Male[itemName] then
-                local item = Config.VanillaClothes.Male[itemName]
-                
+            local item = findVanillaItem("male", itemName)
+            
+            if item then
                 -- Add client data for drawable, component, and texture if missing
                 local clientData = {
                     label = item.label,
@@ -2307,14 +2362,16 @@ function AddVanillaClothes()
                 UpsertStoreItem("suburban", itemName, clientData, stock, item.price or 100)
                 print("^2[SUCCESS] Added " .. itemName .. " to suburban (Stock: " .. stock .. ")^7")
                 addedItems = addedItems + 1
+            else
+                print("^1[ERROR] Item not found in vanilla clothes config: " .. itemName .. "^7")
             end
         end
         
         -- Add female items
         for _, itemName in ipairs(Config.Stores.suburban.items.female) do
-            if Config.VanillaClothes.Female[itemName] then
-                local item = Config.VanillaClothes.Female[itemName]
-                
+            local item = findVanillaItem("female", itemName)
+            
+            if item then
                 -- Add client data for drawable, component, and texture if missing
                 local clientData = {
                     label = item.label,
@@ -2367,6 +2424,8 @@ function AddVanillaClothes()
                 UpsertStoreItem("suburban", itemName, clientData, stock, item.price or 100)
                 print("^2[SUCCESS] Added " .. itemName .. " to suburban (Stock: " .. stock .. ")^7")
                 addedItems = addedItems + 1
+            else
+                print("^1[ERROR] Item " .. itemName .. " not found in vanilla clothes config^7")
             end
         end
     end
@@ -2377,9 +2436,9 @@ function AddVanillaClothes()
         
         -- Add male items
         for _, itemName in ipairs(Config.Stores.ponsonbys.items.male) do
-            if Config.VanillaClothes.Male[itemName] then
-                local item = Config.VanillaClothes.Male[itemName]
-                
+            local item = findVanillaItem("male", itemName)
+            
+            if item then
                 -- Add client data for drawable, component, and texture if missing
                 local clientData = {
                     label = item.label,
@@ -2389,27 +2448,31 @@ function AddVanillaClothes()
                 
                 -- Check if the shared item exists
                 if not QBCore.Shared.Items[itemName] then
+                    print("^1[ERROR] Item not found in shared items: " .. itemName .. "^7")
                     RegisterSharedItem(itemName, item.label, item.description, item.weight or 0.1)
+                    print("^3[INFO] Registered missing shared item: " .. itemName .. "^7")
                 end
                 
                 -- Component detection based on category
-                if item.category == "shirts" or item.category == "jackets" then
-                    clientData.component = 11
-                elseif item.category == "pants" then
-                    clientData.component = 4
-                elseif item.category == "shoes" then
-                    clientData.component = 6
-                elseif item.category == "hats" then
-                    clientData.component = 0
-                elseif item.category == "glasses" then
-                    clientData.component = 1
-                elseif item.category == "accessories" then
-                    if string.find(string.lower(itemName), "necklace") or string.find(string.lower(itemName), "chain") then
-                        clientData.component = 7
-                    elseif string.find(string.lower(itemName), "watch") or string.find(string.lower(itemName), "bracelet") then
+                if not clientData.component then
+                    if item.category == "shirts" or item.category == "jackets" then
+                        clientData.component = 11
+                    elseif item.category == "pants" then
+                        clientData.component = 4
+                    elseif item.category == "shoes" then
                         clientData.component = 6
-                    else
-                        clientData.component = 7
+                    elseif item.category == "hats" then
+                        clientData.component = 0
+                    elseif item.category == "glasses" then
+                        clientData.component = 1
+                    elseif item.category == "accessories" then
+                        if string.find(string.lower(itemName), "necklace") or string.find(string.lower(itemName), "chain") then
+                            clientData.component = 7
+                        elseif string.find(string.lower(itemName), "watch") or string.find(string.lower(itemName), "bracelet") then
+                            clientData.component = 6
+                        else
+                            clientData.component = 7
+                        end
                     end
                 end
                 
@@ -2432,14 +2495,16 @@ function AddVanillaClothes()
                 UpsertStoreItem("ponsonbys", itemName, clientData, stock, item.price or 100)
                 print("^2[SUCCESS] Added " .. itemName .. " to ponsonbys (Stock: " .. stock .. ")^7")
                 addedItems = addedItems + 1
+            else
+                print("^1[ERROR] Item not found in vanilla clothes config: " .. itemName .. "^7")
             end
         end
         
         -- Add female items
         for _, itemName in ipairs(Config.Stores.ponsonbys.items.female) do
-            if Config.VanillaClothes.Female[itemName] then
-                local item = Config.VanillaClothes.Female[itemName]
-                
+            local item = findVanillaItem("female", itemName)
+            
+            if item then
                 -- Add client data for drawable, component, and texture if missing
                 local clientData = {
                     label = item.label,
@@ -2492,6 +2557,8 @@ function AddVanillaClothes()
                 UpsertStoreItem("ponsonbys", itemName, clientData, stock, item.price or 100)
                 print("^2[SUCCESS] Added " .. itemName .. " to ponsonbys (Stock: " .. stock .. ")^7")
                 addedItems = addedItems + 1
+            else
+                print("^1[ERROR] Item " .. itemName .. " not found in vanilla clothes config^7")
             end
         end
     end
@@ -2558,17 +2625,31 @@ function RegisterSharedItem(name, label, description, weight)
         -- Handle rarity properly
         if Config.VanillaClothes then
             local vanillaItem = nil
-            -- Check both male and female items
-            if Config.VanillaClothes.Male and Config.VanillaClothes.Male[name] then
-                vanillaItem = Config.VanillaClothes.Male[name]
-            elseif Config.VanillaClothes.Female and Config.VanillaClothes.Female[name] then
-                vanillaItem = Config.VanillaClothes.Female[name]
+            
+            -- Helper function to find item in nested config
+            local function findItemInConfig(gender, itemName)
+                if not Config.VanillaClothes[gender] then return nil end
+                
+                for category, items in pairs(Config.VanillaClothes[gender]) do
+                    for _, item in ipairs(items) do
+                        if item.name == itemName then
+                            return item
+                        end
+                    end
+                end
+                
+                return nil
             end
+            
+            -- Check both male and female items
+            vanillaItem = findItemInConfig("male", name) or findItemInConfig("female", name)
             
             -- Set rarity if we found the vanilla item
             if vanillaItem and vanillaItem.rarity then
                 QBCore.Shared.Items[name].client.rarity = vanillaItem.rarity
                 print("^3[DEBUG] Set rarity for item " .. name .. " to " .. vanillaItem.rarity .. "^7")
+            else
+                itemData.client.rarity = "common" -- Default rarity
             end
         end
         
@@ -2638,12 +2719,24 @@ function RegisterSharedItem(name, label, description, weight)
     -- Handle rarity - look up in Config.VanillaClothes if available
     if Config.VanillaClothes then
         local vanillaItem = nil
-        -- Check both male and female items
-        if Config.VanillaClothes.Male and Config.VanillaClothes.Male[name] then
-            vanillaItem = Config.VanillaClothes.Male[name]
-        elseif Config.VanillaClothes.Female and Config.VanillaClothes.Female[name] then
-            vanillaItem = Config.VanillaClothes.Female[name]
+        
+        -- Helper function to find item in nested config
+        local function findItemInConfig(gender, itemName)
+            if not Config.VanillaClothes[gender] then return nil end
+            
+            for category, items in pairs(Config.VanillaClothes[gender]) do
+                for _, item in ipairs(items) do
+                    if item.name == itemName then
+                        return item
+                    end
+                end
+            end
+            
+            return nil
         end
+        
+        -- Check both male and female items
+        vanillaItem = findItemInConfig("male", name) or findItemInConfig("female", name)
         
         -- Set rarity if we found the vanilla item
         if vanillaItem and vanillaItem.rarity then
