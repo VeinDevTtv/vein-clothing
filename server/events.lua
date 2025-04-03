@@ -475,4 +475,146 @@ RegisterNetEvent('vein-clothing:server:updateWishlist', function(wishlistItems)
     if Config.Debug then
         print("^2[vein-clothing] Updated wishlist for " .. citizenid .. " with " .. #wishlistItems .. " items^7")
     end
+end)
+
+-- Add to wishlist
+RegisterNetEvent('vein-clothing:server:addToWishlist', function(itemName, itemData)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    
+    if not Player then return end
+    
+    local citizenid = Player.PlayerData.citizenid
+    
+    -- Check if item already exists in wishlist
+    local exists = MySQL.Sync.fetchScalar('SELECT COUNT(*) FROM player_wishlist WHERE citizenid = ? AND item = ?', {citizenid, itemName})
+    
+    if exists > 0 then
+        -- Item already in wishlist, update it
+        if Config.Debug then
+            print("^3[vein-clothing] Item " .. itemName .. " already in wishlist, updating^7")
+        end
+    else
+        -- Add new wishlist item
+        MySQL.Async.execute('INSERT INTO player_wishlist (citizenid, item) VALUES (?, ?)', {citizenid, itemName})
+        
+        if Config.Debug then
+            print("^2[vein-clothing] Added " .. itemName .. " to wishlist for " .. citizenid .. "^7")
+        end
+    end
+    
+    -- After wishlist update, send all wishlist items with full data back to client
+    Citizen.Wait(100) -- Small delay to ensure DB operation completes
+    
+    -- Get all wishlist items
+    local wishlistItems = {}
+    local wishlistResults = MySQL.Sync.fetchAll('SELECT * FROM player_wishlist WHERE citizenid = ?', {citizenid})
+    
+    if wishlistResults then
+        for _, item in ipairs(wishlistResults) do
+            local itemDetails = QBCore.Shared.Items[item.item]
+            if itemDetails then
+                -- Find item availability across all stores
+                local availability = {}
+                
+                -- Check all stores for this item
+                for storeName, storeData in pairs(Config.Stores) do
+                    for _, storeItem in ipairs(storeData.items or {}) do
+                        if storeItem == item.item then
+                            -- Check if item is in stock
+                            local hasStock = true
+                            if StoreStock[storeName] and StoreStock[storeName][item.item] then
+                                hasStock = StoreStock[storeName][item.item].stock > 0
+                            end
+                            
+                            if hasStock then
+                                table.insert(availability, storeName)
+                            end
+                        end
+                    end
+                end
+                
+                -- Add item to wishlist items with full data
+                table.insert(wishlistItems, {
+                    name = item.item,
+                    label = itemDetails.label or item.item,
+                    description = itemDetails.description or "",
+                    rarity = itemDetails.client and itemDetails.client.rarity or "common",
+                    category = itemDetails.client and itemDetails.client.category or "unknown",
+                    subcategory = itemDetails.client and itemDetails.client.subcategory or "general",
+                    color = itemDetails.client and itemDetails.client.color or "neutral",
+                    availability = availability
+                })
+            end
+        end
+    end
+    
+    -- Send updated wishlist to client
+    TriggerClientEvent('vein-clothing:client:updateWishlist', src, wishlistItems)
+end)
+
+-- Remove from wishlist
+RegisterNetEvent('vein-clothing:server:removeFromWishlist', function(itemName)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    
+    if not Player then return end
+    
+    local citizenid = Player.PlayerData.citizenid
+    
+    -- Remove from wishlist
+    MySQL.Async.execute('DELETE FROM player_wishlist WHERE citizenid = ? AND item = ?', {citizenid, itemName})
+    
+    if Config.Debug then
+        print("^3[vein-clothing] Removed " .. itemName .. " from wishlist for " .. citizenid .. "^7")
+    end
+    
+    -- After wishlist update, send all wishlist items with full data back to client
+    Citizen.Wait(100) -- Small delay to ensure DB operation completes
+    
+    -- Get all wishlist items
+    local wishlistItems = {}
+    local wishlistResults = MySQL.Sync.fetchAll('SELECT * FROM player_wishlist WHERE citizenid = ?', {citizenid})
+    
+    if wishlistResults then
+        for _, item in ipairs(wishlistResults) do
+            local itemDetails = QBCore.Shared.Items[item.item]
+            if itemDetails then
+                -- Find item availability across all stores
+                local availability = {}
+                
+                -- Check all stores for this item
+                for storeName, storeData in pairs(Config.Stores) do
+                    for _, storeItem in ipairs(storeData.items or {}) do
+                        if storeItem == item.item then
+                            -- Check if item is in stock
+                            local hasStock = true
+                            if StoreStock[storeName] and StoreStock[storeName][item.item] then
+                                hasStock = StoreStock[storeName][item.item].stock > 0
+                            end
+                            
+                            if hasStock then
+                                table.insert(availability, storeName)
+                            end
+                        end
+                    end
+                end
+                
+                -- Add item to wishlist items with full data
+                table.insert(wishlistItems, {
+                    name = item.item,
+                    label = itemDetails.label or item.item,
+                    description = itemDetails.description or "",
+                    rarity = itemDetails.client and itemDetails.client.rarity or "common",
+                    category = itemDetails.client and itemDetails.client.category or "unknown",
+                    subcategory = itemDetails.client and itemDetails.client.subcategory or "general",
+                    color = itemDetails.client and itemDetails.client.color or "neutral",
+                    availability = availability
+                })
+            end
+        end
+    end
+    
+    -- Send updated wishlist to client
+    TriggerClientEvent('vein-clothing:client:updateWishlist', src, wishlistItems)
 end) 

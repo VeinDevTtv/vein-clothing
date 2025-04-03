@@ -2493,3 +2493,18 @@ RegisterNetEvent('QBCore:Player:SetPlayerData', function(newPlayerData)
         end
     end
 end)
+
+-- Event to handle updated wishlist from server
+RegisterNetEvent('vein-clothing:client:updateWishlist', function(wishlistItems)
+    if not wishlistItems then return end
+    
+    -- Update the NUI with the wishlist items
+    SendNUIMessage({
+        type = 'updateWishlistItems',
+        items = wishlistItems
+    })
+    
+    if Config.Debug then
+        print("^2[vein-clothing] Updated wishlist with " .. #wishlistItems .. " items^7")
+    end
+end)

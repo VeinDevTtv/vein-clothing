@@ -82,7 +82,8 @@ end)
 
 -- NUI callback for wishlist toggle
 RegisterNUICallback('toggleWishlist', function(data, cb)
-    local itemName = data.item
+    local itemName = data.itemName
+    local itemData = data.itemData or {}
     
     -- Check if item is already in wishlist
     QBCore.Functions.TriggerCallback('vein-clothing:server:isItemWishlisted', function(isWishlisted)
@@ -92,7 +93,7 @@ RegisterNUICallback('toggleWishlist', function(data, cb)
             QBCore.Functions.Notify(Lang:t('success.wishlist_removed', {QBCore.Shared.Items[itemName].label}), "success")
         else
             -- Add to wishlist
-            TriggerServerEvent('vein-clothing:server:addToWishlist', itemName)
+            TriggerServerEvent('vein-clothing:server:addToWishlist', itemName, itemData)
             QBCore.Functions.Notify(Lang:t('success.wishlist_added', {QBCore.Shared.Items[itemName].label}), "success")
         end
         

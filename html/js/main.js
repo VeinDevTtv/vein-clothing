@@ -215,44 +215,122 @@ const app = new Vue({
             // Apply category filter
             if (this.selectedCategory) {
                 items = items.filter(item => {
-                    const match = String(item.category).toLowerCase() === String(this.selectedCategory).toLowerCase();
-                    return match;
+                    const itemCategory = String(item.category || "").toLowerCase();
+                    const selectedCategory = String(this.selectedCategory).toLowerCase();
+                    return itemCategory === selectedCategory;
                 });
                 console.log(`After category filter (${this.selectedCategory}):`, items.length);
+                
+                // Additional debugging for subcategory matching
+                if (this.debug && items.length > 0) {
+                    console.log("Category filtered items (sample):", items.slice(0, 3));
+                }
             }
             
             // Apply subcategory filter
             if (this.selectedSubcategory && this.selectedCategory) {
+                // Log items before filtering to debug
+                if (this.debug) {
+                    console.log("Items before subcategory filter:", items.map(item => ({
+                        name: item.name,
+                        label: item.label,
+                        subcategory: item.subcategory,
+                        nameContainsTshirt: item.name.toLowerCase().includes('tshirt') || item.name.toLowerCase().includes('t-shirt') || item.name.toLowerCase().includes('t_shirt')
+                    })));
+                }
+                
                 items = items.filter(item => {
-                    // More flexible subcategory matching (case insensitive and fuzzy)
-                    const itemSubcat = String(item.subcategory || "").toLowerCase();
+                    // Get the subcategory from the item
+                    let itemSubcat = String(item.subcategory || "").toLowerCase();
                     const selectedSubcat = String(this.selectedSubcategory).toLowerCase();
+                    const itemName = String(item.name || "").toLowerCase();
+                    const itemLabel = String(item.label || "").toLowerCase();
                     
-                    // Check for exact match or if item subcategory contains the selected value
+                    // Special case for tshirts - check if the name contains tshirt variants
+                    if (selectedSubcat === "tshirt" && 
+                        (itemName.includes('tshirt') || 
+                         itemName.includes('t-shirt') || 
+                         itemName.includes('t_shirt') ||
+                         itemLabel.includes('t-shirt') || 
+                         itemLabel.includes('tshirt') || 
+                         itemLabel.includes('t shirt'))) {
+                        console.log(`Item matched by name/label as tshirt: ${item.name}`);
+                        return true;
+                    }
+                    
+                    // Check if item's name contains the subcategory (e.g., "jeans_blue" for subcategory "jeans")
+                    if (selectedSubcat !== "tshirt" && itemName.includes(selectedSubcat)) {
+                        console.log(`Item matched by name for subcategory: ${item.name} - ${selectedSubcat}`);
+                        return true;
+                    }
+                    
+                    // Regular subcategory match
                     const match = itemSubcat === selectedSubcat || 
                                   itemSubcat.includes(selectedSubcat) || 
                                   selectedSubcat.includes(itemSubcat);
                                   
+                    if (match) {
+                        console.log(`Item matched by subcategory field: ${item.name} - ${itemSubcat}`);
+                    }
+                    
                     return match;
                 });
                 console.log(`After subcategory filter (${this.selectedSubcategory}):`, items.length);
+                
+                // Additional debugging for subcategory result
+                if (this.debug && items.length > 0) {
+                    console.log("Subcategory filtered items (sample):", items.slice(0, 3));
+                }
             }
             
             // Apply color filter
             if (this.selectedColor) {
+                // Log items before filtering to debug
+                if (this.debug) {
+                    console.log("Items before color filter:", items.map(item => ({
+                        name: item.name,
+                        label: item.label,
+                        color: item.color,
+                        nameContainsColor: item.name.toLowerCase().includes(this.selectedColor.toLowerCase())
+                    })));
+                }
+                
                 items = items.filter(item => {
-                    // More flexible color matching (case insensitive and fuzzy)
+                    // Get the color from the item
                     const itemColor = String(item.color || "").toLowerCase();
                     const selectedColor = String(this.selectedColor).toLowerCase();
+                    const itemName = String(item.name || "").toLowerCase();
+                    const itemLabel = String(item.label || "").toLowerCase();
                     
-                    // Check for exact match or if item color contains the selected value
+                    // Check if item's name contains the color (e.g., "jeans_blue" for color "blue")
+                    if (itemName.includes(selectedColor)) {
+                        console.log(`Item matched by name for color: ${item.name} - ${selectedColor}`);
+                        return true;
+                    }
+                    
+                    // Check if item's label contains the color 
+                    if (itemLabel.includes(selectedColor)) {
+                        console.log(`Item matched by label for color: ${item.name} - ${selectedColor}`);
+                        return true;
+                    }
+                    
+                    // Regular color match
                     const match = itemColor === selectedColor || 
                                   itemColor.includes(selectedColor) || 
                                   selectedColor.includes(itemColor);
                                   
+                    if (match) {
+                        console.log(`Item matched by color field: ${item.name} - ${itemColor}`);
+                    }
+                    
                     return match;
                 });
                 console.log(`After color filter (${this.selectedColor}):`, items.length);
+                
+                // Additional debugging for color result
+                if (this.debug && items.length > 0) {
+                    console.log("Color filtered items (sample):", items.slice(0, 3));
+                }
             }
             
             // Apply rarity filter
@@ -307,44 +385,122 @@ const app = new Vue({
             // Apply category filter
             if (this.selectedCategory) {
                 items = items.filter(item => {
-                    const match = String(item.category).toLowerCase() === String(this.selectedCategory).toLowerCase();
-                    return match;
+                    const itemCategory = String(item.category || "").toLowerCase();
+                    const selectedCategory = String(this.selectedCategory).toLowerCase();
+                    return itemCategory === selectedCategory;
                 });
                 console.log(`After wardrobe category filter (${this.selectedCategory}):`, items.length);
+                
+                // Additional debugging for subcategory matching
+                if (this.debug && items.length > 0) {
+                    console.log("Category filtered wardrobe items (sample):", items.slice(0, 3));
+                }
             }
             
             // Apply subcategory filter
             if (this.selectedSubcategory && this.selectedCategory) {
+                // Log items before filtering to debug
+                if (this.debug) {
+                    console.log("Wardrobe items before subcategory filter:", items.map(item => ({
+                        name: item.name,
+                        label: item.label,
+                        subcategory: item.subcategory,
+                        nameContainsTshirt: item.name.toLowerCase().includes('tshirt') || item.name.toLowerCase().includes('t-shirt') || item.name.toLowerCase().includes('t_shirt')
+                    })));
+                }
+                
                 items = items.filter(item => {
-                    // More flexible subcategory matching (case insensitive and fuzzy)
-                    const itemSubcat = String(item.subcategory || "").toLowerCase();
+                    // Get the subcategory from the item
+                    let itemSubcat = String(item.subcategory || "").toLowerCase();
                     const selectedSubcat = String(this.selectedSubcategory).toLowerCase();
+                    const itemName = String(item.name || "").toLowerCase();
+                    const itemLabel = String(item.label || "").toLowerCase();
                     
-                    // Check for exact match or if item subcategory contains the selected value
+                    // Special case for tshirts - check if the name contains tshirt variants
+                    if (selectedSubcat === "tshirt" && 
+                        (itemName.includes('tshirt') || 
+                         itemName.includes('t-shirt') || 
+                         itemName.includes('t_shirt') ||
+                         itemLabel.includes('t-shirt') || 
+                         itemLabel.includes('tshirt') || 
+                         itemLabel.includes('t shirt'))) {
+                        console.log(`Wardrobe item matched by name/label as tshirt: ${item.name}`);
+                        return true;
+                    }
+                    
+                    // Check if item's name contains the subcategory (e.g., "jeans_blue" for subcategory "jeans")
+                    if (selectedSubcat !== "tshirt" && itemName.includes(selectedSubcat)) {
+                        console.log(`Wardrobe item matched by name for subcategory: ${item.name} - ${selectedSubcat}`);
+                        return true;
+                    }
+                    
+                    // Regular subcategory match
                     const match = itemSubcat === selectedSubcat || 
                                   itemSubcat.includes(selectedSubcat) || 
                                   selectedSubcat.includes(itemSubcat);
                                   
+                    if (match) {
+                        console.log(`Wardrobe item matched by subcategory field: ${item.name} - ${itemSubcat}`);
+                    }
+                    
                     return match;
                 });
                 console.log(`After wardrobe subcategory filter (${this.selectedSubcategory}):`, items.length);
+                
+                // Additional debugging for subcategory result
+                if (this.debug && items.length > 0) {
+                    console.log("Subcategory filtered wardrobe items (sample):", items.slice(0, 3));
+                }
             }
             
             // Apply color filter
             if (this.selectedColor) {
+                // Log items before filtering to debug
+                if (this.debug) {
+                    console.log("Wardrobe items before color filter:", items.map(item => ({
+                        name: item.name,
+                        label: item.label,
+                        color: item.color,
+                        nameContainsColor: item.name.toLowerCase().includes(this.selectedColor.toLowerCase())
+                    })));
+                }
+                
                 items = items.filter(item => {
-                    // More flexible color matching (case insensitive and fuzzy)
+                    // Get the color from the item
                     const itemColor = String(item.color || "").toLowerCase();
                     const selectedColor = String(this.selectedColor).toLowerCase();
+                    const itemName = String(item.name || "").toLowerCase();
+                    const itemLabel = String(item.label || "").toLowerCase();
                     
-                    // Check for exact match or if item color contains the selected value
+                    // Check if item's name contains the color (e.g., "jeans_blue" for color "blue")
+                    if (itemName.includes(selectedColor)) {
+                        console.log(`Wardrobe item matched by name for color: ${item.name} - ${selectedColor}`);
+                        return true;
+                    }
+                    
+                    // Check if item's label contains the color
+                    if (itemLabel.includes(selectedColor)) {
+                        console.log(`Wardrobe item matched by label for color: ${item.name} - ${selectedColor}`);
+                        return true;
+                    }
+                    
+                    // Regular color match
                     const match = itemColor === selectedColor || 
                                   itemColor.includes(selectedColor) || 
                                   selectedColor.includes(itemColor);
                                   
+                    if (match) {
+                        console.log(`Wardrobe item matched by color field: ${item.name} - ${itemColor}`);
+                    }
+                    
                     return match;
                 });
                 console.log(`After wardrobe color filter (${this.selectedColor}):`, items.length);
+                
+                // Additional debugging for color result
+                if (this.debug && items.length > 0) {
+                    console.log("Color filtered wardrobe items (sample):", items.slice(0, 3));
+                }
             }
             
             // Apply search filter
@@ -470,10 +626,29 @@ const app = new Vue({
             if (this.isWishlisted(item.name)) {
                 this.wishlistItems = this.wishlistItems.filter(i => i.name !== item.name);
             } else {
-                this.wishlistItems.push(item);
+                // Add store information to the wishlisted item
+                const wishlistItem = { ...item };
+                
+                // If we're in a store, add current store to availability
+                if (this.inStore && this.currentStore) {
+                    wishlistItem.availability = [this.currentStore.name || this.currentStore.label];
+                    wishlistItem.stock = item.stock;
+                }
+                
+                this.wishlistItems.push(wishlistItem);
+                
+                // Debug info
+                if (this.debug) {
+                    console.log("Added item to wishlist:", wishlistItem);
+                    console.log("Current store:", this.currentStore);
+                    console.log("In store:", this.inStore);
+                }
             }
+            
             this.postNUI('toggleWishlist', {
-                itemName: item.name
+                itemName: item.name,
+                // Send full item data to server for better wishlist tracking
+                itemData: item
             });
         },
         
@@ -866,7 +1041,36 @@ const app = new Vue({
                 
                 this.storeItems = data.storeItems || [];
                 this.wardrobeItems = data.wardrobeItems || [];
-                this.wishlistItems = data.wishlistItems || [];
+                
+                // Update wishlist items with availability data
+                if (data.wishlistItems) {
+                    // Process wishlist items to check availability in current store
+                    if (this.inStore && this.currentStore && this.storeItems.length > 0) {
+                        data.wishlistItems.forEach(wishItem => {
+                            // Find corresponding item in store
+                            const storeItem = this.storeItems.find(item => item.name === wishItem.name);
+                            
+                            if (storeItem) {
+                                // Item is available in current store
+                                if (!wishItem.availability) {
+                                    wishItem.availability = [];
+                                }
+                                
+                                // Add current store to availability if not already included
+                                const storeName = this.currentStore.name || this.currentStore.label;
+                                if (!wishItem.availability.includes(storeName)) {
+                                    wishItem.availability.push(storeName);
+                                }
+                                
+                                // Update stock information
+                                wishItem.stock = storeItem.stock;
+                            }
+                        });
+                    }
+                    
+                    this.wishlistItems = data.wishlistItems;
+                }
+                
                 this.outfits = data.outfits || [];
                 this.dirtyItems = data.dirtyItems || [];
                 this.damagedItems = data.damagedItems || [];
@@ -928,7 +1132,38 @@ const app = new Vue({
             } else if (data.type === 'updateWardrobeItems') {
                 this.wardrobeItems = data.items;
             } else if (data.type === 'updateWishlistItems') {
-                this.wishlistItems = data.items;
+                this.wishlistItems = data.items || [];
+                
+                // Add debugging information
+                if (this.debug) {
+                    console.log("Updated wishlist items:", this.wishlistItems);
+                    if (this.wishlistItems.length > 0) {
+                        console.log("Sample wishlist item:", this.wishlistItems[0]);
+                    }
+                }
+                
+                // If we're in a store, check for availability in the current store
+                if (this.inStore && this.currentStore && this.storeItems.length > 0) {
+                    this.wishlistItems.forEach(wishItem => {
+                        // Find item in current store
+                        const storeItem = this.storeItems.find(item => item.name === wishItem.name);
+                        if (storeItem) {
+                            // Update availability information
+                            if (!wishItem.availability) {
+                                wishItem.availability = [];
+                            }
+                            
+                            // Add current store to availability if not included
+                            const storeName = this.currentStore.name || this.currentStore.label;
+                            if (!wishItem.availability.includes(storeName)) {
+                                wishItem.availability.push(storeName);
+                            }
+                            
+                            // Update stock
+                            wishItem.stock = storeItem.stock;
+                        }
+                    });
+                }
             } else if (data.type === 'updateOutfits') {
                 this.outfits = data.outfits;
             } else if (data.type === 'updateDirtyItems') {
