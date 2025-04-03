@@ -6,17 +6,22 @@ local currentOutfit = {}
 local inWardrobe = false
 local clothingPeds = {}
 
+-- Create mock functions for CircleZone if PolyZone is not available
+local mockDestroy = function() end
+local mockOnPlayerInOut = function(cb) end
+
 -- Import PolyZone for zone creation
 local CircleZone
-if GetResourceState('PolyZone') ~= 'missing' then
+local hasPolyZone = GetResourceState('PolyZone') ~= 'missing'
+
+if hasPolyZone then
     CircleZone = exports['PolyZone']:CircleZone
 else
-    -- Create a mock CircleZone implementation if real PolyZone is not available
     CircleZone = {}
     CircleZone.Create = function(coords, radius, options)
         local mockZone = {}
-        mockZone.destroy = function() end
-        mockZone.onPlayerInOut = function(cb) end
+        mockZone.destroy = mockDestroy
+        mockZone.onPlayerInOut = mockOnPlayerInOut
         return mockZone
     end
 end
@@ -152,13 +157,40 @@ function LoadPeds()
     for storeName, storeData in pairs(Config.Stores) do
         for _, location in ipairs(storeData.locations) do
             local ped = nil
+            local modelHash = GetHashKey(storeData.clerk.model)
             
-            RequestModel(GetHashKey(storeData.clerk.model))
-            while not HasModelLoaded(GetHashKey(storeData.clerk.model)) do
-                Wait(1)
+            -- Add better error handling for model loading
+            if not IsModelInCdimage(modelHash) then
+                print("^1ERROR: Model " .. storeData.clerk.model .. " is not valid for store " .. storeName .. "^7")
+                -- Try fallback model if available
+                modelHash = GetHashKey("a_f_y_business_01")
+                if not IsModelInCdimage(modelHash) then
+                    print("^1ERROR: Fallback model also invalid. Skipping NPC creation for " .. storeName .. "^7")
+                    goto continue
+                end
+                print("^3WARNING: Using fallback model for store " .. storeName .. "^7")
             end
             
-            ped = CreatePed(4, GetHashKey(storeData.clerk.model), location.x, location.y, location.z - 1.0, location.w, false, true)
+            RequestModel(modelHash)
+            
+            -- Add timeout for model loading
+            local timeout = 0
+            while not HasModelLoaded(modelHash) and timeout < 50 do
+                Wait(100)
+                timeout = timeout + 1
+            end
+            
+            if not HasModelLoaded(modelHash) then
+                print("^1ERROR: Failed to load model " .. storeData.clerk.model .. " for store " .. storeName .. " after timeout^7")
+                goto continue
+            end
+            
+            ped = CreatePed(4, modelHash, location.x, location.y, location.z - 1.0, location.w, false, true)
+            
+            if not DoesEntityExist(ped) then
+                print("^1ERROR: Failed to create ped for store " .. storeName .. "^7")
+                goto continue
+            end
             
             SetEntityHeading(ped, location.w)
             FreezeEntityPosition(ped, true)
@@ -170,25 +202,33 @@ function LoadPeds()
             
             table.insert(clothingPeds, ped)
             
-            -- Target interaction if enabled
+            -- Target interaction if enabled and qb-target exists
             if Config.UseTarget then
-                exports['qb-target']:AddTargetEntity(ped, {
-                    options = {
-                        {
-                            type = "client",
-                            event = "vein-clothing:client:openStore",
-                            icon = "fas fa-tshirt",
-                            label = "Browse " .. storeData.label,
-                            args = {
-                                store = storeName
+                if GetResourceState('qb-target') ~= 'missing' then
+                    exports['qb-target']:AddTargetEntity(ped, {
+                        options = {
+                            {
+                                type = "client",
+                                event = "vein-clothing:client:openStore",
+                                icon = "fas fa-tshirt",
+                                label = "Browse " .. storeData.label,
+                                args = {
+                                    store = storeName
+                                }
                             }
-                        }
-                    },
-                    distance = Config.PlayerInteraction.MaxDistance
-                })
+                        },
+                        distance = Config.PlayerInteraction.MaxDistance
+                    })
+                else
+                    print("^3WARNING: qb-target not found, disabling targeting for NPCs^7")
+                end
             end
+            
+            ::continue::
         end
     end
+    
+    print("^2INFO: Loaded " .. #clothingPeds .. " store clerk NPCs^7")
 end
 
 -- Cleanup peds when resource stops
