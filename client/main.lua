@@ -207,43 +207,18 @@ end
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     PlayerData = QBCore.Functions.GetPlayerData()
     
-    -- Load the core features with error handling
+    -- Skip loading stores/tailors/laundromats here since the Initialize function will handle it
+    print("^2[vein-clothing] Player loaded event received, updating player data...^7")
+    
+    -- Wait for resource to be fully ready before loading player outfit
     Citizen.CreateThread(function()
-        -- Add a small delay to ensure all scripts are fully loaded
-        Citizen.Wait(1000)
+        -- Add a delay to let other handlers finish
+        Citizen.Wait(5000)
         
-        print("^2[vein-clothing] Player loaded, initializing clothing system...^7")
-        
-        -- Safely call each initialization function with error handling
-        local success, result = pcall(function()
-            return LoadStores()
+        -- Only load the outfit, don't reload the stores
+        pcall(function()
+            LoadPlayerOutfit()
         end)
-        if not success then
-            print("^1[ERROR] Failed to load stores: " .. tostring(result) .. "^7")
-        end
-        
-        success, result = pcall(function()
-            return LoadLaundromats()
-        end)
-        if not success then
-            print("^1[ERROR] Failed to load laundromats: " .. tostring(result) .. "^7")
-        end
-        
-        success, result = pcall(function()
-            return LoadTailors()
-        end)
-        if not success then
-            print("^1[ERROR] Failed to load tailors: " .. tostring(result) .. "^7")
-        end
-        
-        success, result = pcall(function()
-            return LoadPlayerOutfit()
-        end)
-        if not success then
-            print("^1[ERROR] Failed to load player outfit: " .. tostring(result) .. "^7")
-        end
-        
-        print("^2[vein-clothing] Initialization completed for player: " .. (PlayerData.charinfo and PlayerData.charinfo.firstname or "Unknown") .. "^7")
     end)
 end)
 
@@ -1029,11 +1004,19 @@ function Initialize()
         end
     end
     
-    -- Load various components in the correct order with proper error handling
+    -- Export the config for other resources to use
+    exports('GetClothingConfig', function()
+        return Config.Items or Config -- Return the clothing configuration
+    end)
+    
+    -- Give the resource more time to fully initialize before loading stores
     Citizen.CreateThread(function()
-        -- Give the server a moment to initialize
-        Citizen.Wait(1000)
+        -- Add a longer delay to ensure all resources and functions are loaded
+        Citizen.Wait(3000)
         
+        print("^2[vein-clothing] Initialization delay complete, setting up world objects now...^7")
+        
+        -- Load various components in the correct order with proper error handling
         print("^3[vein-clothing] Loading stores...^7")
         local storesLoaded = false
         
@@ -1097,11 +1080,6 @@ function Initialize()
         end
         
         print("^2[vein-clothing] Initialization complete!^7")
-    end)
-    
-    -- Export the config for other resources to use
-    exports('GetClothingConfig', function()
-        return Config.Items or Config -- Return the clothing configuration
     end)
 end
 
@@ -2121,10 +2099,26 @@ AddEventHandler('onClientResourceStart', function(resourceName)
     
     print("^2[vein-clothing] Resource started, beginning initialization...^7")
     
-    -- Wait a moment for the config to be fully loaded
+    -- Make sure the placeholder functions are replaced with real implementations first
+    LoadStores = _G.LoadStores
+    LoadLaundromats = _G.LoadLaundromats
+    LoadTailors = _G.LoadTailors
+    LoadPlayerOutfit = _G.LoadPlayerOutfit
+    
+    -- Wait a moment for the config to be fully loaded before initializing
     Citizen.CreateThread(function()
-        Citizen.Wait(500)
-        print("^2[vein-clothing] Starting initialization process...^7")
+        -- Make sure we allow time for all script files to load
+        Citizen.Wait(1000)
+        
+        -- For safe measure, ensure we have all required functions
+        if type(LoadStores) ~= "function" or 
+           type(LoadLaundromats) ~= "function" or 
+           type(LoadTailors) ~= "function" or 
+           type(LoadPlayerOutfit) ~= "function" then
+            print("^1[ERROR] Critical functions not yet loaded - trying to initialize anyway...^7")
+        end
+        
+        print("^2[vein-clothing] Starting core initialization process...^7")
         Initialize()
     end)
 end)
