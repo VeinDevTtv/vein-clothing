@@ -898,6 +898,36 @@ RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     -- Skip loading stores/tailors/laundromats here since the Initialize function will handle it
     print("^2[vein-clothing] Player loaded event received, updating player data...^7")
     
+    -- Create a thread specifically to load stores after player is fully loaded
+    Citizen.CreateThread(function()
+        -- Wait an initial delay
+        Citizen.Wait(5000)
+        
+        print("^2[vein-clothing] Player fully loaded, attempting to load stores directly from player loaded event...^7")
+        
+        -- First check if stores have already been loaded
+        local npcCount = 0
+        for _, _ in pairs(storeNPCs or {}) do
+            npcCount = npcCount + 1
+        end
+        
+        -- Only try loading if no NPCs are already loaded
+        if npcCount == 0 then
+            -- Force load stores
+            local success = pcall(function()
+                LoadStores()
+            end)
+            
+            if success then
+                print("^2[vein-clothing] Successfully loaded stores during player loaded event!^7")
+            else
+                print("^1[ERROR] Failed to load stores during player loaded event!^7")
+            end
+        else
+            print("^2[vein-clothing] Stores already loaded, skipping redundant load^7")
+        end
+    end)
+    
     -- Wait for resource to be fully ready before loading player outfit
     Citizen.CreateThread(function()
         -- Add a longer delay to let other handlers finish
@@ -1081,6 +1111,26 @@ end)
 RegisterNetEvent('vein-clothing:client:openStore', function(data)
     if inWardrobe then return end
     
+    -- Check if any NPCs were loaded, if not, reload stores
+    local npcCount = 0
+    for _, _ in pairs(storeNPCs or {}) do
+        npcCount = npcCount + 1
+    end
+    
+    -- Reload stores if needed before opening the UI
+    if npcCount == 0 then
+        print("^3[vein-clothing] No store NPCs detected when opening store. Loading stores now...^7")
+        local success = pcall(function()
+            LoadStores()
+        end)
+        
+        if success then
+            print("^2[vein-clothing] Successfully loaded stores before opening UI!^7")
+        else
+            print("^1[ERROR] Failed to load stores before opening UI!^7")
+        end
+    end
+    
     -- Debug log in verbose mode
     if Config and Config.Debug then
         print("^3[vein-clothing] openStore event received^7")
@@ -1120,37 +1170,60 @@ end)
 
 -- Function to open clothing store UI
 function OpenClothingStore(storeName)
-    if not storeName then return end
+    if not storeName then 
+        print("^1[ERROR] No store name provided to OpenClothingStore^7")
+        return 
+    end
+    
+    print("^2[vein-clothing] Opening store UI for: " .. storeName .. "^7")
     
     -- Get store data
     local storeData = Config.Stores[storeName]
     if not storeData then
+        print("^1[ERROR] Invalid store data for: " .. storeName .. "^7")
         QBCore.Functions.Notify("Invalid store: " .. storeName, "error")
         return
     end
     
     -- Get player gender
     local gender = GetPlayerGender()
+    print("^2[vein-clothing] Player gender: " .. gender .. "^7")
     
     -- Get available clothing items for this store and gender
     QBCore.Functions.TriggerCallback('vein-clothing:server:getStoreItems', function(items, wishlist)
         if not items then
+            print("^1[ERROR] Failed to load store items from server^7")
             QBCore.Functions.Notify("Failed to load store items", "error")
             return
         end
         
-        -- Open NUI with store data
-        SetNuiFocus(true, true)
+        print("^2[vein-clothing] Received " .. #items .. " items from server, opening UI...^7")
+        
+        -- Set focus and state variables
         isInClothingStore = true
+        SetNuiFocus(true, true)
+        
+        -- Create store data structure for UI
+        local storeDataForUI = {
+            name = storeName,
+            label = storeData.label,
+            inventory = items,
+            wishlist = wishlist or {}
+        }
+        
+        -- Send data to NUI
+        print("^2[vein-clothing] Sending data to NUI...^7")
         SendNUIMessage({
             action = "openStore",
-            storeData = {
-                name = storeName,
-                label = storeData.label,
-                inventory = items,
-                wishlist = wishlist or {}
-            }
+            storeData = storeDataForUI
         })
+        
+        -- Verify UI state after brief delay
+        Citizen.SetTimeout(500, function()
+            if not isInClothingStore then
+                print("^1[ERROR] Store UI state inconsistent. isInClothingStore = false after UI open attempt^7")
+            end
+        end)
     end, storeName, gender)
 end
 
@@ -1273,7 +1346,16 @@ end)
 
 -- Close UI
 RegisterNUICallback('closeUI', function(data, cb)
+    print("^2[vein-clothing] closeUI callback received, closing UI...^7")
+    
+    -- Reset UI state
+    isInClothingStore = false
+    inWardrobe = false
+    
+    -- Release focus
     SetNuiFocus(false, false)
+    
+    print("^2[vein-clothing] UI closed successfully^7")
     cb({success = true})
 end)
 

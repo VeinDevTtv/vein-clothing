@@ -450,4 +450,29 @@ RegisterNetEvent('vein-clothing:server:saveOutfit', function(name, outfitData)
             end
         end)
     end)
+end)
+
+-- Update player's wishlist
+RegisterNetEvent('vein-clothing:server:updateWishlist', function(wishlistItems)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    
+    if not Player then return end
+    
+    local citizenid = Player.PlayerData.citizenid
+    
+    -- Remove existing wishlist items
+    MySQL.Async.execute('DELETE FROM player_wishlist WHERE citizenid = ?', {citizenid})
+    
+    -- Add new wishlist items
+    if wishlistItems and #wishlistItems > 0 then
+        for _, itemName in ipairs(wishlistItems) do
+            MySQL.Async.execute('INSERT INTO player_wishlist (citizenid, item) VALUES (?, ?)', 
+                {citizenid, itemName})
+        end
+    end
+    
+    if Config.Debug then
+        print("^2[vein-clothing] Updated wishlist for " .. citizenid .. " with " .. #wishlistItems .. " items^7")
+    end
 end) 

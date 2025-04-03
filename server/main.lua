@@ -194,6 +194,94 @@ function RegisterCallbacks()
         cb(inventory)
     end)
     
+    -- Get store items callback
+    QBCore.Functions.CreateCallback('vein-clothing:server:getStoreItems', function(source, cb, storeName, gender)
+        local src = source
+        local Player = QBCore.Functions.GetPlayer(src)
+        
+        if not Player then
+            cb(nil, {})
+            return
+        end
+        
+        local citizenid = Player.PlayerData.citizenid
+        local storeData = Config.Stores[storeName]
+        
+        if not storeData then
+            cb(nil, {})
+            return
+        end
+        
+        local storeItems = {}
+        
+        -- Get items from store inventory
+        for _, itemName in ipairs(storeData.inventory) do
+            local item = QBCore.Shared.Items[itemName]
+            
+            if item and item.client then
+                -- Skip if gender-specific and doesn't match player gender
+                if item.client.gender and item.client.gender ~= gender then
+                    goto continue
+                end
+                
+                -- Calculate price
+                local basePrice = item.price or 100
+                local rarity = item.client.rarity or "common"
+                local rarityMultiplier = Config.Rarity[rarity].priceMultiplier or 1.0
+                local storeMultiplier = storeData.priceMultiplier or 1.0
+                local price = math.floor(basePrice * rarityMultiplier * storeMultiplier)
+                
+                -- Get stock info
+                local stock = 10 -- Default stock
+                if StoreStock[storeName] and StoreStock[storeName][itemName] then
+                    stock = StoreStock[storeName][itemName].stock
+                end
+                
+                -- Skip if out of stock
+                if stock <= 0 then
+                    goto continue
+                end
+                
+                -- Add to store items list
+                table.insert(storeItems, {
+                    name = itemName,
+                    label = item.label,
+                    price = price,
+                    stock = stock,
+                    rarity = rarity,
+                    category = item.client.category or "unknown",
+                    description = item.description or "",
+                    component = item.client.component,
+                    drawable = item.client.drawable,
+                    texture = item.client.texture,
+                    variations = item.client.variations,
+                    gender = item.client.gender or "unisex",
+                    images = item.client.images or {}
+                })
+                
+                ::continue::
+            end
+        end
+        
+        -- Get player's wishlist
+        local wishlist = {}
+        local wishlistResults = MySQL.Sync.fetchAll('SELECT * FROM player_wishlist WHERE citizenid = ?', {citizenid})
+        
+        if wishlistResults then
+            for _, item in ipairs(wishlistResults) do
+                table.insert(wishlist, item.item)
+            end
+        end
+        
+        cb(storeItems, wishlist)
+    end)
+    
+    -- Purchase item callback
+    QBCore.Functions.CreateCallback('vein-clothing:server:purchaseItem', function(source, cb, itemName, price, variation, storeType)
+        local success, message = PurchaseItem(source, itemName, storeType)
+        cb(success, message)
+    end)
+    
     -- Get player's clothing callback
     QBCore.Functions.CreateCallback('vein-clothing:server:getPlayerClothing', function(source, cb)
         local src = source
