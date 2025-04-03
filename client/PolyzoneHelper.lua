@@ -13,13 +13,19 @@ Citizen.CreateThread(function()
     
     -- Check if PolyZone is available
     if GetResourceState('PolyZone') ~= 'missing' then
-        -- Try to get the CreateCircleZone export
+        -- Try to get CircleZone from PolyZone in different ways
         local success, result = pcall(function()
-            local testZone = exports['PolyZone']:CreateCircleZone(
-                vector3(0, 0, 0), -- Test location
-                1.0,               -- Radius
-                { name = "test" }  -- Options
-            )
+            -- First try the direct CircleZone export if available
+            if exports['PolyZone'].CircleZone then
+                return exports['PolyZone'].CircleZone
+            end
+            
+            -- Next try creating a CircleZone directly
+            local testZone = exports['PolyZone']:CreateZone('circle', {
+                center = vector3(0, 0, 0),
+                radius = 1.0,
+                options = { name = "test" }
+            })
             
             -- Clean up test zone
             if testZone and testZone.destroy then
@@ -29,7 +35,11 @@ Citizen.CreateThread(function()
             -- Return a wrapper that matches our expected interface
             return {
                 Create = function(coords, radius, options)
-                    return exports['PolyZone']:CreateCircleZone(coords, radius, options)
+                    return exports['PolyZone']:CreateZone('circle', {
+                        center = coords,
+                        radius = radius,
+                        options = options or {}
+                    })
                 end
             }
         end)

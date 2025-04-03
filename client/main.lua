@@ -1016,6 +1016,42 @@ RegisterNetEvent('vein-clothing:client:openStore', function(data)
     OpenClothingStore(storeName)
 end)
 
+-- Function to open clothing store UI
+function OpenClothingStore(storeName)
+    if not storeName then return end
+    
+    -- Get store data
+    local storeData = Config.Stores[storeName]
+    if not storeData then
+        QBCore.Functions.Notify("Invalid store: " .. storeName, "error")
+        return
+    end
+    
+    -- Get player gender
+    local gender = GetPlayerGender()
+    
+    -- Get available clothing items for this store and gender
+    QBCore.Functions.TriggerCallback('vein-clothing:server:getStoreItems', function(items, wishlist)
+        if not items then
+            QBCore.Functions.Notify("Failed to load store items", "error")
+            return
+        end
+        
+        -- Open NUI with store data
+        SetNuiFocus(true, true)
+        isInClothingStore = true
+        SendNUIMessage({
+            action = "openStore",
+            storeData = {
+                name = storeName,
+                label = storeData.label,
+                inventory = items,
+                wishlist = wishlist or {}
+            }
+        })
+    end, storeName, gender)
+end
+
 -- Calculate item price based on rarity and store
 function GetItemPrice(itemName, storeName)
     local item = QBCore.Shared.Items[itemName]
