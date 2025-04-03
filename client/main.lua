@@ -782,11 +782,13 @@ Citizen.CreateThread(function()
         local createFunc = exports[GetCurrentResourceName()]:CreateSafeCircleZone
         
         -- Try calling it with test parameters to validate it works
-        local testZone = createFunc(vector3(0, 0, 0), 1.0, {name = "test_zone"})
-        
-        -- Clean up test zone if it was created
-        if testZone and type(testZone.destroy) == "function" then
-            testZone:destroy()
+        if type(createFunc) == "function" then
+            local testZone = createFunc(vector3(0, 0, 0), 1.0, {name = "test_zone"})
+            
+            -- Clean up test zone if it was created
+            if testZone and type(testZone.destroy) == "function" then
+                testZone:destroy()
+            end
         end
         
         -- Return the function for future use

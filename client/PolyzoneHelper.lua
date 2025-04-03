@@ -13,50 +13,106 @@ Citizen.CreateThread(function()
     
     -- Check if PolyZone is available
     if GetResourceState('PolyZone') ~= 'missing' then
-        -- Based on the actual CircleZone.lua implementation
+        -- Initialize a wrapper around the CircleZone functionality
         local success, result = pcall(function()
-            -- In the actual resource, CircleZone is a global variable exposed by CircleZone.lua
-            -- We need to use the Create method directly
-            return {
-                Create = function(coords, radius, options)
-                    if not options then options = {} end
-                    
-                    -- Create a CircleZone using the documented API
-                    local zone = exports['PolyZone']:CircleZone(
-                        coords,               -- center
-                        radius,               -- radius
-                        {                     -- options
-                            name = options.name or "circle_zone",
-                            useZ = options.useZ or false,
-                            debugPoly = options.debugPoly or false,
-                            debugColor = options.debugColor or {0, 255, 0}
-                        }
-                    )
-                    
-                    return zone
-                end
-            }
-        end)
-        
-        -- Fallback if direct CircleZone failed
-        if not success or not result then
-            success, result = pcall(function()
+            -- First approach: Try to use the native CreateCircleZone export (newer versions)
+            local zone = nil
+            
+            -- Create a test function to see if CreateCircleZone exists
+            local testFunc = function()
+                local testCenter = vector3(0, 0, 0)
+                local testRadius = 1.0
+                zone = exports['PolyZone']:CreateCircleZone(testCenter, testRadius, {name = "test"})
+                return zone ~= nil
+            end
+            
+            -- Try the test function, but catch any errors
+            local testSuccess, hasCreateCircleZone = pcall(testFunc)
+            
+            -- If the test succeeded and we got a zone, clean it up
+            if testSuccess and hasCreateCircleZone and zone and zone.destroy then
+                zone:destroy()
+                zone = nil
+                
+                -- Return a wrapper around CreateCircleZone
                 return {
-                    Create = function(coords, radius, options)
-                        if not options then options = {} end
-                        
-                        -- Try a different approach - some versions of PolyZone use a different API
+                    Create = function(center, radius, options)
+                        options = options or {}
+                        -- Directly use the export
+                        return exports['PolyZone']:CreateCircleZone(center, radius, options)
+                    end
+                }
+            end
+            
+            -- Second approach: Try to access the global CircleZone.Create method (older versions)
+            testFunc = function()
+                local testCenter = vector3(0, 0, 0)
+                local testRadius = 1.0
+                local testOptions = {name = "test"}
+                -- Try to create a zone using the exports
+                zone = exports['PolyZone']:CircleZone(testCenter, testRadius, testOptions)
+                return zone ~= nil
+            end
+            
+            -- Try the second test function
+            testSuccess, _ = pcall(testFunc)
+            
+            -- Clean up test zone if created
+            if zone and zone.destroy then
+                zone:destroy()
+                zone = nil
+            end
+            
+            if testSuccess then
+                -- Return a wrapper around the CircleZone export
+                return {
+                    Create = function(center, radius, options)
+                        options = options or {}
+                        return exports['PolyZone']:CircleZone(center, radius, options)
+                    end
+                }
+            end
+            
+            -- Final approach: Try to create a generic zone and specify 'circle' as type
+            testFunc = function()
+                local data = {
+                    center = vector3(0, 0, 0),
+                    radius = 1.0,
+                    name = "test",
+                    debugPoly = false
+                }
+                zone = exports['PolyZone']:Create(data, 'circle')
+                return zone ~= nil
+            end
+            
+            -- Try the final test function
+            testSuccess, _ = pcall(testFunc)
+            
+            -- Clean up test zone if created
+            if zone and zone.destroy then
+                zone:destroy()
+                zone = nil
+            end
+            
+            if testSuccess then
+                -- Return a wrapper around Create with 'circle' type
+                return {
+                    Create = function(center, radius, options)
+                        options = options or {}
                         return exports['PolyZone']:Create({
-                            center = coords,
+                            center = center,
                             radius = radius,
                             name = options.name or "circle_zone",
                             useZ = options.useZ or false,
                             debugPoly = options.debugPoly or false
-                        }, "circle")
+                        }, 'circle')
                     end
                 }
-            end)
-        end
+            end
+            
+            -- If all approaches failed, throw error
+            error("Could not find any compatible PolyZone CircleZone method")
+        end)
         
         if success and result then
             -- Successfully created our wrapper
@@ -143,19 +199,54 @@ function CreateSafeCircleZone(coords, radius, options)
     end
     
     -- Ensure coords is a valid vector
-    if type(coords) ~= "vector3" then
-        print("^3[WARNING] Invalid coords in CreateSafeCircleZone. Using fallback coords.^7")
+    if not coords then
+        print("^3[WARNING] Nil coords in CreateSafeCircleZone. Using fallback coords.^7")
         coords = vector3(0.0, 0.0, 0.0)
+    elseif type(coords) ~= "vector3" then
+        -- Try to convert to vector3 if it's a table with x,y,z
+        if type(coords) == "table" and coords.x and coords.y and coords.z then
+            coords = vector3(coords.x, coords.y, coords.z)
+        else
+            print("^3[WARNING] Invalid coords in CreateSafeCircleZone. Using fallback coords.^7")
+            coords = vector3(0.0, 0.0, 0.0)
+        end
     end
     
     -- Ensure radius is a number
-    if type(radius) ~= "number" or radius <= 0 then
+    if not radius or type(radius) ~= "number" then
         print("^3[WARNING] Invalid radius in CreateSafeCircleZone. Using fallback radius.^7")
+        radius = 1.0
+    elseif radius <= 0 then
+        print("^3[WARNING] Radius must be positive in CreateSafeCircleZone. Using fallback radius.^7")
         radius = 1.0
     end
     
+    -- Ensure options is a table
+    if not options then options = {} end
+    if type(options) ~= "table" then
+        print("^3[WARNING] Invalid options in CreateSafeCircleZone. Using empty options.^7")
+        options = {}
+    end
+    
     -- Create zone with validated parameters
-    return zoneAPI.Create(coords, radius, options)
+    local zone = nil
+    
+    -- Safely create the zone
+    local success, result = pcall(function()
+        return zoneAPI.Create(coords, radius, options)
+    end)
+    
+    if success and result then
+        zone = result
+    else
+        print("^1[ERROR] Failed to create zone: " .. tostring(result) .. ". Using mock zone.^7")
+        zone = {
+            destroy = function() return true end,
+            onPlayerInOut = function(cb) return {} end
+        }
+    end
+    
+    return zone
 end
 
 -- Export the function
