@@ -1176,88 +1176,108 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
         end
     end
     
-    -- Special debug for necklace items
-    if string.find(string.lower(itemName), "necklace") or string.find(string.lower(itemName), "chain") or string.find(string.lower(itemName), "pearl") then
-        print("^3[NECKLACE-DEBUG] Processing necklace item: " .. itemName .. "^7")
-        print("^3[NECKLACE-DEBUG] Item data:")
-        print("^3[NECKLACE-DEBUG] - label: " .. tostring(item.label))
-        print("^3[NECKLACE-DEBUG] - category: " .. tostring(item.client and item.client.category))
-        print("^3[NECKLACE-DEBUG] - component: " .. tostring(item.client and item.client.component))
-        print("^3[NECKLACE-DEBUG] - drawable: " .. tostring(item.client and item.client.drawable))
-        print("^3[NECKLACE-DEBUG] - texture: " .. tostring(item.client and item.client.texture))
+    -- Ensure item has client and component data
+    if not item.client then
+        item.client = {}
+        print("^3[WARNING-SERVER] Created missing client object for: " .. itemName .. "^7")
+    end
+    
+    -- Try to determine category and component from item name if missing
+    if not item.client.component or not item.client.category then
+        local itemNameLower = string.lower(itemName)
         
-        -- Ensure necklace has correct component
-        if not item.client then
-            item.client = {}
-            print("^3[NECKLACE-DEBUG] Created missing client object for necklace^7")
+        -- Necklace/accessories detection
+        if string.find(itemNameLower, "necklace") or string.find(itemNameLower, "chain") or string.find(itemNameLower, "pearl") then
+            item.client.component = 7
+            item.client.category = "accessories"
+            item.client.subcategory = item.client.subcategory or "necklace"
+        -- Top/shirt detection
+        elseif string.find(itemNameLower, "shirt") or string.find(itemNameLower, "jacket") or string.find(itemNameLower, "top") or string.find(itemNameLower, "sweater") or string.find(itemNameLower, "hoodie") then
+            item.client.component = 11
+            item.client.category = "shirts"
+            if string.find(itemNameLower, "tshirt") or string.find(itemNameLower, "t-shirt") then
+                item.client.subcategory = item.client.subcategory or "t-shirt"
+            elseif string.find(itemNameLower, "jacket") then
+                item.client.subcategory = item.client.subcategory or "jacket"
+            elseif string.find(itemNameLower, "hoodie") or string.find(itemNameLower, "sweat") then
+                item.client.subcategory = item.client.subcategory or "hoodie"
+            else
+                item.client.subcategory = item.client.subcategory or "shirt"
+            end
+        -- Pants detection
+        elseif string.find(itemNameLower, "pant") or string.find(itemNameLower, "jean") or string.find(itemNameLower, "short") or string.find(itemNameLower, "skirt") then
+            item.client.component = 4
+            item.client.category = "pants"
+            if string.find(itemNameLower, "jean") then
+                item.client.subcategory = item.client.subcategory or "jeans"
+            elseif string.find(itemNameLower, "short") then
+                item.client.subcategory = item.client.subcategory or "shorts"
+            elseif string.find(itemNameLower, "skirt") then
+                item.client.subcategory = item.client.subcategory or "skirt"
+            else
+                item.client.subcategory = item.client.subcategory or "pants"
+            end
+        -- Shoes detection
+        elseif string.find(itemNameLower, "shoe") or string.find(itemNameLower, "boot") or string.find(itemNameLower, "sneaker") then
+            item.client.component = 6
+            item.client.category = "shoes"
+            if string.find(itemNameLower, "boot") then
+                item.client.subcategory = item.client.subcategory or "boots"
+            elseif string.find(itemNameLower, "sneaker") then
+                item.client.subcategory = item.client.subcategory or "sneakers"
+            else
+                item.client.subcategory = item.client.subcategory or "shoes"
+            end
+        -- Hat detection
+        elseif string.find(itemNameLower, "hat") or string.find(itemNameLower, "cap") or string.find(itemNameLower, "beanie") or string.find(itemNameLower, "helmet") then
+            item.client.component = 0
+            item.client.category = "hats"
+            if string.find(itemNameLower, "cap") then
+                item.client.subcategory = item.client.subcategory or "cap"
+            elseif string.find(itemNameLower, "beanie") then
+                item.client.subcategory = item.client.subcategory or "beanie"
+            elseif string.find(itemNameLower, "helmet") then
+                item.client.subcategory = item.client.subcategory or "helmet"
+            else
+                item.client.subcategory = item.client.subcategory or "hat"
+            end
+        -- Glasses detection
+        elseif string.find(itemNameLower, "glass") then
+            item.client.component = 1
+            item.client.category = "glasses"
+            if string.find(itemNameLower, "sun") then
+                item.client.subcategory = item.client.subcategory or "sunglasses"
+            else
+                item.client.subcategory = item.client.subcategory or "glasses"
+            end
+        -- Watch detection
+        elseif string.find(itemNameLower, "watch") then
+            item.client.component = 6
+            item.client.category = "accessories"
+            item.client.subcategory = item.client.subcategory or "watch"
+        -- Bracelet detection
+        elseif string.find(itemNameLower, "bracelet") then
+            item.client.component = 7
+            item.client.category = "accessories"
+            item.client.subcategory = item.client.subcategory or "bracelet"
+        -- Default to torso
+        else
+            item.client.component = 11
+            item.client.category = "clothes"
+            item.client.subcategory = item.client.subcategory or "general"
         end
         
-        -- Force correct component for necklaces
-        item.client.component = 7 -- 7 is for necklaces
-        item.client.category = "accessories"
+        -- Set default drawable and texture if needed
         item.client.drawable = item.client.drawable or 0
         item.client.texture = item.client.texture or 0
         
-        -- Update the shared item
+        -- Set defaults for any other missing properties
+        item.client.color = item.client.color or "neutral"
+        item.client.rarity = item.client.rarity or "common"
+        
+        -- Save the enhanced item data back to shared items
         QBCore.Shared.Items[itemName] = item
-        print("^3[NECKLACE-DEBUG] Updated shared item definition for: " .. itemName .. "^7")
-    end
-    
-    -- Verify the item has all required client data
-    if not item.client or not item.client.component then
-        print("^1[ERROR-SERVER] Item missing required client data: " .. itemName .. "^7")
-        
-        -- Attempt to fix missing data
-        if not item.client then
-            item.client = {}
-            print("^3[WARNING-SERVER] Created missing client object for: " .. itemName .. "^7")
-        end
-        
-        if not item.client.component then
-            -- Try to detect the component type based on item name
-            local itemNameLower = string.lower(itemName)
-            if string.find(itemNameLower, "shirt") or string.find(itemNameLower, "jacket") or string.find(itemNameLower, "top") then
-                item.client.component = 11 -- Upper body
-                item.client.category = "shirts"
-            elseif string.find(itemNameLower, "pant") or string.find(itemNameLower, "jean") or string.find(itemNameLower, "short") then
-                item.client.component = 4 -- Legs
-                item.client.category = "pants"
-            elseif string.find(itemNameLower, "shoe") or string.find(itemNameLower, "boot") then
-                item.client.component = 6 -- Feet
-                item.client.category = "shoes"
-            elseif string.find(itemNameLower, "hat") or string.find(itemNameLower, "cap") then
-                item.client.component = 0 -- Hat
-                item.client.category = "hats"
-            elseif string.find(itemNameLower, "glass") then
-                item.client.component = 1 -- Glasses
-                item.client.category = "glasses"
-            elseif string.find(itemNameLower, "necklace") or string.find(itemNameLower, "chain") or string.find(itemNameLower, "pearl") then
-                item.client.component = 7 -- Necklace
-                item.client.category = "accessories"
-            elseif string.find(itemNameLower, "watch") or string.find(itemNameLower, "bracelet") then
-                item.client.component = 6 -- Wrist
-                item.client.category = "accessories"
-            else
-                item.client.component = 11 -- Default to torso
-                item.client.category = "clothes"
-            end
-            
-            print("^3[WARNING-SERVER] Set component " .. item.client.component .. " for: " .. itemName .. " based on name^7")
-        end
-        
-        if not item.client.drawable then
-            item.client.drawable = 0
-            print("^3[WARNING-SERVER] Set default drawable 0 for: " .. itemName .. "^7")
-        end
-        
-        if not item.client.texture then
-            item.client.texture = 0
-            print("^3[WARNING-SERVER] Set default texture 0 for: " .. itemName .. "^7")
-        end
-        
-        -- Save the fixes back to QBCore.Shared.Items
-        QBCore.Shared.Items[itemName] = item
-        print("^3[WARNING-SERVER] Updated shared definition for: " .. itemName .. "^7")
+        print("^3[WARNING-SERVER] Enhanced item data for: " .. itemName .. " - Category: " .. item.client.category .. ", Component: " .. item.client.component .. "^7")
     end
     
     -- Calculate price
@@ -1282,16 +1302,7 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
         Config.Rarity[rarity] = { priceMultiplier = 1.0, maxStock = 10 }
     end
     
-    -- Ensure rarity has priceMultiplier
-    if not Config.Rarity[rarity].priceMultiplier then
-        print("^1[ERROR-SERVER] Missing priceMultiplier for rarity " .. rarity .. ", setting default^7")
-        Config.Rarity[rarity].priceMultiplier = 1.0
-    end
-    
-    -- Log the rarity for debugging
-    print("^3[DEBUG-RARITY] Item: " .. itemName .. " has rarity: " .. rarity .. " with multiplier: " .. tostring(Config.Rarity[rarity].priceMultiplier) .. "^7")
-    
-    local rarityMultiplier = Config.Rarity[rarity].priceMultiplier
+    local rarityMultiplier = Config.Rarity[rarity].priceMultiplier or 1.0
     local storeMultiplier = 1.0
     
     -- Apply store multiplier if available
@@ -1325,7 +1336,7 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
     -- Remove money from player
     Player.Functions.RemoveMoney(moneyType, price)
     
-    -- Add item to player inventory with variation data
+    -- Add item to player inventory with metadata
     local info = {
         variation = 0, -- Default variation
         condition = 100, -- Perfect condition
@@ -1334,76 +1345,59 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
         component = item.client.component,
         drawable = item.client.drawable,
         texture = item.client.texture,
-        category = item.client.category or "clothes"
+        category = item.client.category,
+        subcategory = item.client.subcategory or "general",
+        color = item.client.color or "neutral"
     }
     
-    -- Make sure our item is usable first
-    print("^3[ITEM-DEBUG] Ensuring item is usable: " .. itemName .. "^7")
+    -- Make sure our item is usable first by registering it again
+    local isProp = (item.client.category == 'hats' or 
+                   item.client.category == 'glasses' or 
+                   item.client.category == 'ears' or 
+                   item.client.category == 'watches' or 
+                   item.client.category == 'bracelets')
     
-    -- Re-register the usable item before adding it
-    QBCore.Functions.CreateUseableItem(itemName, function(source, item)
+    QBCore.Functions.CreateUseableItem(itemName, function(source, itemData)
         local src = source
         if not src or src == 0 then return end
         
         local Player = QBCore.Functions.GetPlayer(src)
         if not Player then return end
         
-        local info = item.info or {}
-        -- Always use shared item data for consistency
-        if QBCore.Shared.Items[itemName] and QBCore.Shared.Items[itemName].client then
-            info.component = QBCore.Shared.Items[itemName].client.component
-            info.drawable = QBCore.Shared.Items[itemName].client.drawable
-            info.texture = QBCore.Shared.Items[itemName].client.texture
-            info.category = QBCore.Shared.Items[itemName].client.category
-        end
+        -- Make a complete item object to pass to client
+        local clientItem = {
+            name = itemName,
+            label = item.label,
+            client = {
+                component = item.client.component,
+                drawable = item.client.drawable,
+                texture = item.client.texture,
+                category = item.client.category,
+                subcategory = item.client.subcategory or "general",
+                color = item.client.color or "neutral",
+                event = isProp and "vein-clothing:client:wearProp" or "vein-clothing:client:wearItem"
+            }
+        }
         
-        print("^3[ITEM-DEBUG] Using item: " .. itemName .. " with component: " .. tostring(info.component) .. "^7")
-        
-        if info.component == 0 or info.component == 1 or info.component == 2 or
-           info.component == 6 or info.component == 7 then
-            -- Props
-            TriggerClientEvent('vein-clothing:client:wearProp', src, info)
+        -- Trigger the appropriate event
+        if isProp then
+            TriggerClientEvent('vein-clothing:client:wearProp', src, clientItem)
         else
-            -- Components
-            TriggerClientEvent('vein-clothing:client:wearItem', src, info)
+            TriggerClientEvent('vein-clothing:client:wearItem', src, clientItem)
         end
+        
+        -- Trigger wardrobe refresh
+        TriggerClientEvent('vein-clothing:client:refreshWardrobe', src)
     end)
     
-    -- Try several methods to add the item to inventory
-    local added = false
-    
-    -- Method 1: Standard QB-Core method
-    print("^3[ITEM-DEBUG] Attempting to add item using standard method: " .. itemName .. "^7")
-    added = Player.Functions.AddItem(itemName, 1, nil, info)
-    
-    -- Method 2: If direct add fails, try qb-inventory export
-    if not added and exports['qb-inventory'] then
-        print("^3[ITEM-DEBUG] Standard method failed, trying qb-inventory export for: " .. itemName .. "^7")
-        local result = exports['qb-inventory']:AddItem(src, itemName, 1, nil, info)
-        added = (result ~= false and result ~= nil)
-    end
-    
-    -- Method 3: Fallback to HandleInventory method
+    -- Add the item to player inventory
+    local added = Player.Functions.AddItem(itemName, 1, nil, info)
     if not added then
-        print("^3[ITEM-DEBUG] Export method failed, trying HandleInventory for: " .. itemName .. "^7")
-        added = HandleInventory('addItem', src, itemName, 1, info)
-    end
-    
-    -- Method 4: Last resort, try with no info
-    if not added then
-        print("^3[ITEM-DEBUG] All standard methods failed, trying without metadata for: " .. itemName .. "^7")
-        added = Player.Functions.AddItem(itemName, 1)
-    end
-    
-    -- Final check to see if we successfully added the item
-    if not added then
-        -- Refund the player if the item couldn't be added
-        print("^1[ERROR-SERVER] FAILED TO ADD ITEM TO INVENTORY: " .. itemName .. "^7")
         Player.Functions.AddMoney(moneyType, price)
-        return false, "Inventory full or item invalid"
+        return false, "Could not add item to inventory"
     end
     
-    -- Update stock
+    -- Update store stock in memory
     if StoreStock[storeType] and StoreStock[storeType][itemName] then
         StoreStock[storeType][itemName].stock = StoreStock[storeType][itemName].stock - 1
         
@@ -1415,11 +1409,20 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
         }, function(rowsChanged)
             if rowsChanged == 0 then
                 -- Record doesn't exist yet, create it
-                MySQL.Async.execute('INSERT INTO store_inventory (store, item, stock, last_restock) VALUES (?, ?, ?, ?)', {
+                MySQL.Async.execute('INSERT INTO store_inventory (store, item, stock, last_restock, category, subcategory, color, component, drawable, texture, rarity, price, label) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', {
                     storeType,
                     itemName,
                     StoreStock[storeType][itemName].stock,
-                    type(StoreStock[storeType][itemName].lastRestock) == "number" and os.date('%Y-%m-%d %H:%M:%S', StoreStock[storeType][itemName].lastRestock) or os.date('%Y-%m-%d %H:%M:%S', os.time())
+                    os.date('%Y-%m-%d %H:%M:%S', os.time()),
+                    item.client.category or "unknown",
+                    item.client.subcategory or "general",
+                    item.client.color or "neutral",
+                    item.client.component or 11,
+                    item.client.drawable or 0,
+                    item.client.texture or 0,
+                    item.client.rarity or "common",
+                    price,
+                    item.label or itemName
                 })
             end
         end)
@@ -1430,6 +1433,9 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
     
     -- Refresh player inventory
     TriggerClientEvent('inventory:client:ItemBox', source, QBCore.Shared.Items[itemName], "add")
+    
+    -- Trigger client event to refresh wardrobe
+    TriggerClientEvent('vein-clothing:client:refreshWardrobe', source)
     
     return true, "Item purchased"
 end
@@ -1874,17 +1880,18 @@ Citizen.CreateThread(function()
                         drawable = fullItemData.client.drawable,
                         texture = fullItemData.client.texture,
                         category = fullItemData.client.category,
+                        subcategory = fullItemData.client.subcategory or "general",
+                        color = fullItemData.client.color or "neutral",
+                        rarity = fullItemData.client.rarity or "common",
                         event = isProp and "vein-clothing:client:wearProp" or "vein-clothing:client:wearItem"
                     }
                 }
                 
-                -- Additional logging to debug
-                if Config.Debug then
-                    print("^2[vein-clothing] Using item " .. itemName .. " (component: " .. 
-                          tostring(fullItemData.client.component) .. ", drawable: " .. 
-                          tostring(fullItemData.client.drawable) .. ", texture: " .. 
-                          tostring(fullItemData.client.texture) .. ")^7")
-                end
+                -- Additional debug logging
+                print("^2[USE-CLOTHING] Player " .. Player.PlayerData.citizenid .. " is using clothing item: " .. 
+                    itemName .. " (Component: " .. tostring(fullItemData.client.component) .. 
+                    ", Drawable: " .. tostring(fullItemData.client.drawable) .. 
+                    ", Texture: " .. tostring(fullItemData.client.texture) .. ")^7")
                 
                 if isProp then
                     -- Trigger prop wear event
@@ -1894,10 +1901,8 @@ Citizen.CreateThread(function()
                     TriggerClientEvent('vein-clothing:client:wearItem', source, clientItem)
                 end
                 
-                -- Log the clothing usage
-                if Config.Debug then
-                    print("^2[vein-clothing] Player " .. Player.PlayerData.citizenid .. " used clothing item: " .. itemName .. "^7")
-                end
+                -- Update wardrobe items cache
+                TriggerClientEvent('vein-clothing:client:refreshWardrobe', source)
             end)
             
             registeredCount = registeredCount + 1
@@ -3175,6 +3180,9 @@ function RegisterClothingAsUsable()
                         drawable = fullItemData.client.drawable,
                         texture = fullItemData.client.texture,
                         category = fullItemData.client.category,
+                        subcategory = fullItemData.client.subcategory or "general",
+                        color = fullItemData.client.color or "neutral",
+                        rarity = fullItemData.client.rarity or "common",
                         event = isProp and "vein-clothing:client:wearProp" or "vein-clothing:client:wearItem"
                     }
                 }
@@ -3192,6 +3200,9 @@ function RegisterClothingAsUsable()
                     -- Trigger regular clothing wear event
                     TriggerClientEvent('vein-clothing:client:wearItem', source, clientItem)
                 end
+                
+                -- Update wardrobe items cache
+                TriggerClientEvent('vein-clothing:client:refreshWardrobe', source)
             end)
             
             registeredCount = registeredCount + 1

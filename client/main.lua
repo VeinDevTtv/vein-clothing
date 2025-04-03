@@ -358,7 +358,7 @@ function LoadStores()
                         else
                             print("^3[DEBUG-STORES] WARNING: qb-target not found, disabling targeting for store NPCs^7")
                         end
-                    elseif CircleZone then
+                    else
                         -- Create interaction zone
                         print("^2[DEBUG-STORES] Creating CircleZone for store^7")
                         
@@ -1416,6 +1416,20 @@ RegisterNUICallback('purchaseItem', function(data, cb)
                     end
                 end
             end, currentStore, GetPlayerGender())
+            
+            -- Refresh wardrobe items to include newly purchased item
+            QBCore.Functions.TriggerCallback('vein-clothing:server:getWardrobeItems', function(wardrobeItems)
+                if wardrobeItems then
+                    SendNUIMessage({
+                        type = "updateWardrobeItems",
+                        items = wardrobeItems
+                    })
+                    
+                    if Config.Debug then
+                        print("^2[vein-clothing] Updated wardrobe items after purchase^7")
+                    end
+                end
+            end, GetPlayerGender())
             
             -- Notify user that item is available in wardrobe
             Citizen.SetTimeout(500, function()

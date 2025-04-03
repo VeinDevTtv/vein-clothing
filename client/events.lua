@@ -498,4 +498,29 @@ end, false)
 -- Register all commands
 function RegisterCommands()
     -- Already registered above
-end 
+end
+
+-- Event to refresh wardrobe items when clothing is used
+RegisterNetEvent('vein-clothing:client:refreshWardrobe', function()
+    -- Only refresh if we have the wardrobe open
+    if inWardrobe then
+        print("^2[vein-clothing] Refreshing wardrobe items after clothing use^7")
+        
+        -- Get updated wardrobe items
+        QBCore.Functions.TriggerCallback('vein-clothing:server:getWardrobeItems', function(wardrobeItems)
+            if wardrobeItems then
+                SendNUIMessage({
+                    type = "updateWardrobeItems",
+                    items = wardrobeItems
+                })
+                
+                if Config.Debug then
+                    print("^2[vein-clothing] Updated wardrobe items, count: " .. #wardrobeItems .. "^7")
+                end
+            end
+        end, GetPlayerGender())
+    else
+        -- Store a flag to refresh when wardrobe is next opened
+        shouldRefreshWardrobe = true
+    end
+end) 
