@@ -1120,20 +1120,30 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
         print("^3[NECKLACE-DEBUG] - texture: " .. tostring(item.client and item.client.texture))
         
         -- Ensure necklace has correct component
-        if item.client and not item.client.component then
-            item.client.component = 7 -- 7 is for necklaces
-            print("^3[NECKLACE-DEBUG] Fixed missing component, set to 7 (necklace)^7")
+        if not item.client then
+            item.client = {}
+            print("^3[NECKLACE-DEBUG] Created missing client object for necklace^7")
         end
         
+        -- Force correct component for necklaces
+        item.client.component = 7 -- 7 is for necklaces
+        print("^3[NECKLACE-DEBUG] Set component to 7 (necklace)^7")
+        
         -- Ensure drawable and texture
-        if item.client and not item.client.drawable then
+        if not item.client.drawable then
             item.client.drawable = 0
             print("^3[NECKLACE-DEBUG] Fixed missing drawable, set to 0^7")
         end
         
-        if item.client and not item.client.texture then
+        if not item.client.texture then
             item.client.texture = 0
             print("^3[NECKLACE-DEBUG] Fixed missing texture, set to 0^7")
+        end
+        
+        -- Ensure category is set
+        if not item.client.category then
+            item.client.category = "accessories"
+            print("^3[NECKLACE-DEBUG] Fixed missing category, set to accessories^7")
         end
     end
     
@@ -1219,11 +1229,27 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
         purchased = true -- Indicates item was purchased (not found/crafted)
     }
     
+    -- For clothing items, add the component, drawable, and texture info
+    if item.client then
+        info.component = item.client.component
+        info.drawable = item.client.drawable
+        info.texture = item.client.texture
+        info.category = item.client.category or "clothes"
+    end
+    
     -- Try direct method for items that have issues with HandleInventory
     local added = false
     if string.find(string.lower(itemName), "necklace") or string.find(string.lower(itemName), "chain") or string.find(string.lower(itemName), "pearl") then
         print("^3[NECKLACE-DEBUG] Using direct Player.Functions.AddItem for necklace^7")
+        -- Include detailed info for debugging
+        print("^3[NECKLACE-DEBUG] Item info: " .. json.encode(info))
         added = Player.Functions.AddItem(itemName, 1, nil, info)
+        
+        if not added then
+            print("^1[ERROR-SERVER] Failed to add necklace item with direct method^7")
+            -- Try a plain add as fallback
+            added = Player.Functions.AddItem(itemName, 1)
+        end
     else
         -- Use the HandleInventory function to add item
         added = HandleInventory('addItem', src, itemName, 1, info)
