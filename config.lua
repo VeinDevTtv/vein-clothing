@@ -324,6 +324,33 @@ Config.Debug = {
     LogToConsole = true -- Log to console
 }
 
+--[[
+    DEBUG OPTIONS
+    Settings for debugging and development
+]]
+Config.ComponentNames = { -- For better debug info readability
+    [0] = "Face",
+    [1] = "Mask",
+    [2] = "Hair",
+    [3] = "Torso (Arms/Upper Body)",
+    [4] = "Pants (Legs)",
+    [5] = "Backpacks/Parachutes",
+    [6] = "Shoes",
+    [7] = "Accessories",
+    [8] = "Undershirt",
+    [9] = "Body Armor/Vests",
+    [10] = "Decals/Badges",
+    [11] = "Shirts/Tops"
+}
+Config.PropNames = { -- For better debug info readability
+    [0] = "Hat",
+    [1] = "Glasses",
+    [2] = "Ear Accessories",
+    [3] = "Watches",
+    [6] = "Wrist Bands",
+    [7] = "Bracelets"
+}
+
 -- UI Configuration
 if not Config.UI then
     Config.UI = {}

@@ -1631,10 +1631,14 @@ end
 
 -- Update existing code to use the new functions
 RegisterNetEvent('vein-clothing:client:wearItem', function(itemData)
-    if not itemData then return end
+    if not itemData then 
+        print("^1[ERROR] No itemData received in wearItem event^7")
+        return 
+    end
     
     -- Check if we have valid item client data
     if not itemData.client then
+        print("^1[ERROR] Missing client data for item: " .. (itemData.name or "unknown") .. "^7")
         QBCore.Functions.Notify("This clothing item is missing configuration data", "error")
         return
     end
@@ -1644,16 +1648,48 @@ RegisterNetEvent('vein-clothing:client:wearItem', function(itemData)
     local drawable = itemData.client.drawable
     local texture = itemData.client.texture
     
+    -- Debug info
+    print("^2[vein-clothing] Wearing item: " .. (itemData.name or "unknown") .. "^7")
+    print("^2[vein-clothing] Component: " .. tostring(component) .. ", Drawable: " .. tostring(drawable) .. ", Texture: " .. tostring(texture) .. "^7")
+    
     -- If this component is already being worn, we need to store what's currently worn
     local previousItem = nil
     if currentOutfit[component] then
         previousItem = currentOutfit[component]
         -- Notify that we're replacing an item
-        QBCore.Functions.Notify("Replaced " .. QBCore.Shared.Items[previousItem.name].label, "primary")
+        if previousItem.name and QBCore.Shared.Items[previousItem.name] then
+            QBCore.Functions.Notify("Replaced " .. QBCore.Shared.Items[previousItem.name].label, "primary")
+        end
     end
     
     -- Apply the clothing item to the player
-    SetPedComponentVariation(SafePlayerPedId(), component, drawable, texture, 0)
+    local playerPed = SafePlayerPedId()
+    if not playerPed or playerPed == -1 then
+        print("^1[ERROR] Invalid player ped in wearItem function^7")
+        QBCore.Functions.Notify("Could not apply clothing item", "error")
+        return
+    end
+    
+    -- Check if component, drawable, texture are valid numbers
+    if type(component) ~= "number" or type(drawable) ~= "number" or type(texture) ~= "number" then
+        print("^1[ERROR] Invalid component/drawable/texture values: " .. 
+            "Component: " .. tostring(component) .. 
+            ", Drawable: " .. tostring(drawable) .. 
+            ", Texture: " .. tostring(texture) .. "^7")
+        QBCore.Functions.Notify("This clothing item has invalid configuration", "error")
+        return
+    end
+    
+    -- Try to apply the item with error handling
+    local success = pcall(function()
+        SetPedComponentVariation(playerPed, component, drawable, texture, 0)
+    end)
+    
+    if not success then
+        print("^1[ERROR] Failed to apply clothing component^7")
+        QBCore.Functions.Notify("Failed to apply clothing item", "error")
+        return
+    end
     
     -- Update the current outfit tracking
     currentOutfit[component] = {
@@ -1667,7 +1703,7 @@ RegisterNetEvent('vein-clothing:client:wearItem', function(itemData)
     TriggerServerEvent('vein-clothing:server:degradeClothing', itemData.name, Config.Condition.WornDegradationMin)
     
     -- Show notification
-    QBCore.Functions.Notify('You are now wearing ' .. itemData.label, 'success')
+    QBCore.Functions.Notify('You are now wearing ' .. (itemData.label or itemData.name), 'success')
     
     -- Debug print of current outfit if enabled
     if Config.Debug then
@@ -1682,23 +1718,72 @@ end)
 
 -- Wear/remove prop item (hats, glasses, etc.)
 RegisterNetEvent('vein-clothing:client:wearProp', function(itemData)
-    if not itemData or not itemData.client then return end
+    if not itemData then
+        print("^1[ERROR] No itemData received in wearProp event^7")
+        return
+    end
+    
+    if not itemData.client then
+        print("^1[ERROR] Missing client data for prop item: " .. (itemData.name or "unknown") .. "^7")
+        QBCore.Functions.Notify("This accessory item is missing configuration data", "error")
+        return
+    end
     
     local component = itemData.client.component
     local drawable = itemData.client.drawable
     local texture = itemData.client.texture
     
+    -- Debug info
+    print("^2[vein-clothing] Wearing/removing prop: " .. (itemData.name or "unknown") .. "^7")
+    print("^2[vein-clothing] Component: " .. tostring(component) .. ", Drawable: " .. tostring(drawable) .. ", Texture: " .. tostring(texture) .. "^7")
+    
+    -- Get valid ped
+    local playerPed = SafePlayerPedId()
+    if not playerPed or playerPed == -1 then
+        print("^1[ERROR] Invalid player ped in wearProp function^7")
+        QBCore.Functions.Notify("Could not apply accessory item", "error")
+        return
+    end
+    
+    -- Check if component, drawable, texture are valid numbers
+    if type(component) ~= "number" or type(drawable) ~= "number" or type(texture) ~= "number" then
+        print("^1[ERROR] Invalid prop values: " .. 
+            "Component: " .. tostring(component) .. 
+            ", Drawable: " .. tostring(drawable) .. 
+            ", Texture: " .. tostring(texture) .. "^7")
+        QBCore.Functions.Notify("This accessory has invalid configuration", "error")
+        return
+    end
+    
     -- Check if removing or wearing
     if currentOutfit[component] and currentOutfit[component].name == itemData.name then
-        -- Remove prop
-        ClearPedProp(SafePlayerPedId(), component)
+        -- Remove prop with error handling
+        local success = pcall(function()
+            ClearPedProp(playerPed, component)
+        end)
+        
+        if not success then
+            print("^1[ERROR] Failed to remove prop^7")
+            QBCore.Functions.Notify("Failed to remove accessory", "error")
+            return
+        end
+        
         currentOutfit[component] = nil
+        QBCore.Functions.Notify("Removed " .. (itemData.label or itemData.name), "success")
         
         -- Degrade condition slightly when removing
         TriggerServerEvent('vein-clothing:server:degradeClothing', itemData.name, 0.1)
     else
-        -- Wear prop
-        SetPedPropIndex(SafePlayerPedId(), component, drawable, texture, true)
+        -- Wear prop with error handling
+        local success = pcall(function()
+            SetPedPropIndex(playerPed, component, drawable, texture, true)
+        end)
+        
+        if not success then
+            print("^1[ERROR] Failed to apply prop^7")
+            QBCore.Functions.Notify("Failed to wear accessory", "error")
+            return
+        end
         
         -- Update current outfit
         currentOutfit[component] = {
@@ -1708,8 +1793,21 @@ RegisterNetEvent('vein-clothing:client:wearProp', function(itemData)
             variation = 0
         }
         
+        QBCore.Functions.Notify("You are now wearing " .. (itemData.label or itemData.name), "success")
+        
         -- Degrade condition when wearing
         TriggerServerEvent('vein-clothing:server:degradeClothing', itemData.name, Config.Condition.degradePerUse)
+    end
+    
+    -- Debug print of current outfit if enabled
+    if Config.Debug then
+        local outfitString = "^3[vein-clothing] Current outfit props: "
+        for comp, item in pairs(currentOutfit) do
+            if comp == 0 or comp == 1 or comp == 2 or comp == 6 or comp == 7 then -- Prop components
+                outfitString = outfitString .. comp .. "=" .. item.name .. ", "
+            end
+        end
+        print(outfitString .. "^7")
     end
 end)
 

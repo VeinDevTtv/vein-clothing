@@ -1433,16 +1433,43 @@ Citizen.CreateThread(function()
                              item.client.category == 'bracelets')))
             
             -- Register the item as useable
-            QBCore.Functions.CreateUseableItem(itemName, function(source, item)
+            QBCore.Functions.CreateUseableItem(itemName, function(source, itemData)
                 local Player = QBCore.Functions.GetPlayer(source)
                 if not Player then return end
                 
+                local fullItemData = QBCore.Shared.Items[itemName]
+                if not fullItemData or not fullItemData.client then
+                    print("^1[ERROR] Missing client data for item: " .. itemName .. "^7")
+                    return
+                end
+                
+                -- Make a complete item object to pass to client
+                local clientItem = {
+                    name = itemName,
+                    label = fullItemData.label,
+                    client = {
+                        component = fullItemData.client.component,
+                        drawable = fullItemData.client.drawable,
+                        texture = fullItemData.client.texture,
+                        category = fullItemData.client.category,
+                        event = isProp and "vein-clothing:client:wearProp" or "vein-clothing:client:wearItem"
+                    }
+                }
+                
+                -- Additional logging to debug
+                if Config.Debug then
+                    print("^2[vein-clothing] Using item " .. itemName .. " (component: " .. 
+                          tostring(fullItemData.client.component) .. ", drawable: " .. 
+                          tostring(fullItemData.client.drawable) .. ", texture: " .. 
+                          tostring(fullItemData.client.texture) .. ")^7")
+                end
+                
                 if isProp then
                     -- Trigger prop wear event
-                    TriggerClientEvent('vein-clothing:client:wearProp', source, QBCore.Shared.Items[itemName])
+                    TriggerClientEvent('vein-clothing:client:wearProp', source, clientItem)
                 else
                     -- Trigger regular clothing wear event
-                    TriggerClientEvent('vein-clothing:client:wearItem', source, QBCore.Shared.Items[itemName])
+                    TriggerClientEvent('vein-clothing:client:wearItem', source, clientItem)
                 end
                 
                 -- Log the clothing usage
