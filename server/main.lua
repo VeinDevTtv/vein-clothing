@@ -150,8 +150,6 @@ function LoadStoreStockFromDatabase()
                     if QBCore.Shared.Items[itemName] then
                         -- Parse timestamp or use current time - with extra safety checks
                         local lastRestock = os.time()
-                        
-                        -- Additional safety check to ensure row.last_restock exists and is valid
                         if row.last_restock ~= nil then
                             -- Check if last_restock is a string or a number
                             if type(row.last_restock) == "string" then
@@ -212,7 +210,7 @@ function LoadStoreStockFromDatabase()
                             QBCore.Shared.Items[itemName].client.component = tonumber(row.component) or QBCore.Shared.Items[itemName].client.component or 11
                             QBCore.Shared.Items[itemName].client.drawable = tonumber(row.drawable) or QBCore.Shared.Items[itemName].client.drawable or 0 
                             QBCore.Shared.Items[itemName].client.texture = tonumber(row.texture) or QBCore.Shared.Items[itemName].client.texture or 0
-                            QBCore.Shared.Items[itemName].rarity = row.rarity or QBCore.Shared.Items[itemName].rarity or "common"
+                            QBCore.Shared.Items[itemName].client.rarity = row.rarity or QBCore.Shared.Items[itemName].client.rarity or "common"
                         end
                     else
                         print("^1[ERROR] Item not found in QBCore.Shared.Items: " .. itemName .. ". Attempting to register.^7")
@@ -543,6 +541,8 @@ function RegisterCallbacks()
                     stock = stock,
                     rarity = rarity,
                     category = item.client.category or "unknown",
+                    subcategory = item.client.subcategory or "general",
+                    color = item.client.color or "neutral",
                     description = item.description or "A stylish clothing item.",
                     component = item.client.component,
                     drawable = item.client.drawable,
@@ -2149,11 +2149,20 @@ function PopulateStoreInventories()
                     end)
                 else
                     -- Insert new record
-                    MySQL.Async.execute('INSERT INTO store_inventory (store, item, stock, last_restock) VALUES (?, ?, ?, ?)', {
+                    MySQL.Async.execute('INSERT INTO store_inventory (store, item, stock, last_restock, category, subcategory, color, component, drawable, texture, rarity, price, label) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', {
                         storeType,
                         itemName,
                         stock,
-                        os.date('%Y-%m-%d %H:%M:%S', os.time())
+                        os.date('%Y-%m-%d %H:%M:%S', os.time()),
+                        item.client.category or "unknown",
+                        item.client.subcategory or "general",
+                        item.client.color or "neutral",
+                        item.client.component or 11,
+                        item.client.drawable or 0,
+                        item.client.texture or 0,
+                        rarity,
+                        price,
+                        item.label or itemName
                     }, function(rowsAffected)
                         print("^2[DATABASE] Inserted item " .. itemName .. " for store " .. storeType .. " (Rows affected: " .. tostring(rowsAffected) .. ")^7")
                     end)
@@ -2270,11 +2279,20 @@ function PopulateStoreInventories()
                     end)
                 else
                     -- Insert new record
-                    MySQL.Async.execute('INSERT INTO store_inventory (store, item, stock, last_restock) VALUES (?, ?, ?, ?)', {
+                    MySQL.Async.execute('INSERT INTO store_inventory (store, item, stock, last_restock, category, subcategory, color, component, drawable, texture, rarity, price, label) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', {
                         storeType,
                         itemName,
                         stock,
-                        os.date('%Y-%m-%d %H:%M:%S', os.time())
+                        os.date('%Y-%m-%d %H:%M:%S', os.time()),
+                        item.client.category or "unknown",
+                        item.client.subcategory or "general",
+                        item.client.color or "neutral",
+                        item.client.component or 11,
+                        item.client.drawable or 0,
+                        item.client.texture or 0,
+                        rarity,
+                        price,
+                        item.label or itemName
                     }, function(rowsAffected)
                         print("^2[DATABASE] Inserted item " .. itemName .. " for store " .. storeType .. " (Rows affected: " .. tostring(rowsAffected) .. ")^7")
                     end)

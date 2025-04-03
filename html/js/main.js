@@ -255,6 +255,16 @@ const app = new Vue({
                 items = items.filter(item => item.category === this.selectedCategory);
             }
             
+            // Apply subcategory filter
+            if (this.selectedSubcategory && this.selectedCategory) {
+                items = items.filter(item => item.subcategory === this.selectedSubcategory);
+            }
+            
+            // Apply color filter
+            if (this.selectedColor) {
+                items = items.filter(item => item.color === this.selectedColor);
+            }
+            
             // Apply search filter
             if (this.searchQuery) {
                 const query = this.searchQuery.toLowerCase();
