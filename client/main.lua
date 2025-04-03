@@ -8,27 +8,13 @@ local clothingPeds = {}
 local storeNPCs = {}
 local storeZones = {}
 
--- Forward declarations of functions that are used before their actual definitions
--- We need to define them as empty functions first, then they'll be overwritten with the actual implementations later
-LoadStores = function() 
-    print("^3[vein-clothing] LoadStores function not fully initialized yet. Please wait...^7")
-    return false 
-end
-
-LoadLaundromats = function() 
-    print("^3[vein-clothing] LoadLaundromats function not fully initialized yet. Please wait...^7")
-    return false 
-end
-
-LoadTailors = function() 
-    print("^3[vein-clothing] LoadTailors function not fully initialized yet. Please wait...^7")
-    return false 
-end
-
-LoadPlayerOutfit = function() 
-    print("^3[vein-clothing] LoadPlayerOutfit function not fully initialized yet. Please wait...^7")
-    return false 
-end
+-- Replace forward declarations with better implementation
+-- Instead of creating placeholder functions, we'll explicitly validate that functions
+-- exist before calling them in the Initialize function
+local loadStoresFn
+local loadLaundromatsFn
+local loadTailorsFn
+local loadPlayerOutfitFn
 
 -- Ensure Config exists
 if not Config then
@@ -216,9 +202,21 @@ RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
         Citizen.Wait(5000)
         
         -- Only load the outfit, don't reload the stores
-        pcall(function()
-            LoadPlayerOutfit()
-        end)
+        -- Make sure we have the function reference by now
+        if type(loadPlayerOutfitFn) == "function" then
+            pcall(function()
+                loadPlayerOutfitFn()
+            end)
+        else
+            -- Try to get the function directly
+            if type(LoadPlayerOutfit) == "function" then
+                pcall(function()
+                    LoadPlayerOutfit()
+                end)
+            else
+                print("^1[ERROR] LoadPlayerOutfit function still not available in OnPlayerLoaded event.^7")
+            end
+        end
     end)
 end)
 
@@ -929,6 +927,33 @@ function Initialize()
     -- Print debug message for initialization start
     print("^2[vein-clothing] Starting initialization process...^7")
     
+    -- Set up local references to functions now that they should be defined
+    loadStoresFn = LoadStores
+    loadLaundromatsFn = LoadLaundromats
+    loadTailorsFn = LoadTailors
+    loadPlayerOutfitFn = LoadPlayerOutfit
+    
+    -- Validate function references
+    if type(loadStoresFn) ~= "function" then
+        print("^1[ERROR] LoadStores function not defined. Store NPCs won't be loaded.^7")
+        loadStoresFn = function() return false end
+    end
+    
+    if type(loadLaundromatsFn) ~= "function" then
+        print("^1[ERROR] LoadLaundromats function not defined. Laundromat NPCs won't be loaded.^7")
+        loadLaundromatsFn = function() return false end
+    end
+    
+    if type(loadTailorsFn) ~= "function" then
+        print("^1[ERROR] LoadTailors function not defined. Tailor NPCs won't be loaded.^7")
+        loadTailorsFn = function() return false end
+    end
+    
+    if type(loadPlayerOutfitFn) ~= "function" then
+        print("^1[ERROR] LoadPlayerOutfit function not defined. Player outfits won't be loaded.^7")
+        loadPlayerOutfitFn = function() return false end
+    end
+    
     -- Wait for QBCore to be fully initialized
     local qbCoreAttempts = 0
     while not QBCore do
@@ -1022,7 +1047,7 @@ function Initialize()
         
         -- Safely call LoadStores with error handling
         pcall(function()
-            storesLoaded = LoadStores()
+            storesLoaded = loadStoresFn()
         end)
         
         if not storesLoaded then
@@ -1034,7 +1059,7 @@ function Initialize()
         
         -- Safely call LoadLaundromats with error handling
         pcall(function()
-            laundromatsLoaded = LoadLaundromats()
+            laundromatsLoaded = loadLaundromatsFn()
         end)
         
         if not laundromatsLoaded then
@@ -1046,7 +1071,7 @@ function Initialize()
         
         -- Safely call LoadTailors with error handling
         pcall(function()
-            tailorsLoaded = LoadTailors()
+            tailorsLoaded = loadTailorsFn()
         end)
         
         if not tailorsLoaded then
@@ -1058,7 +1083,7 @@ function Initialize()
         
         -- Safely call LoadPlayerOutfit with error handling
         pcall(function()
-            LoadPlayerOutfit()
+            loadPlayerOutfitFn()
             outfitLoaded = true
         end)
         
@@ -2099,24 +2124,10 @@ AddEventHandler('onClientResourceStart', function(resourceName)
     
     print("^2[vein-clothing] Resource started, beginning initialization...^7")
     
-    -- Make sure the placeholder functions are replaced with real implementations first
-    LoadStores = _G.LoadStores
-    LoadLaundromats = _G.LoadLaundromats
-    LoadTailors = _G.LoadTailors
-    LoadPlayerOutfit = _G.LoadPlayerOutfit
-    
     -- Wait a moment for the config to be fully loaded before initializing
     Citizen.CreateThread(function()
-        -- Make sure we allow time for all script files to load
-        Citizen.Wait(1000)
-        
-        -- For safe measure, ensure we have all required functions
-        if type(LoadStores) ~= "function" or 
-           type(LoadLaundromats) ~= "function" or 
-           type(LoadTailors) ~= "function" or 
-           type(LoadPlayerOutfit) ~= "function" then
-            print("^1[ERROR] Critical functions not yet loaded - trying to initialize anyway...^7")
-        end
+        -- Wait longer to ensure all script functions are fully defined
+        Citizen.Wait(5000)
         
         print("^2[vein-clothing] Starting core initialization process...^7")
         Initialize()
