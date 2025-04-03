@@ -275,13 +275,22 @@ exports('CreateSafeCircleZone', function(coords, radius, options)
     if type(coords) ~= "vector3" then
         if type(coords) == "table" and coords.x ~= nil and coords.y ~= nil then
             -- Convert table to vector3
-            coords = vector3(coords.x, coords.y, coords.z or 0.0)
+            local x = tonumber(coords.x) or 0.0
+            local y = tonumber(coords.y) or 0.0
+            local z = tonumber(coords.z) or 0.0
+            coords = vector3(x, y, z)
         elseif type(coords) == "number" then
-            -- If someone passes individual numbers, try to get radius and options from other positions
-            local x, y, z = coords, radius, options
-            radius = z -- Third parameter becomes options
-            options = {}
-            coords = vector3(x, y, 0.0)
+            -- If someone passes x,y,z as separate arguments
+            local x = tonumber(coords) or 0.0
+            local y = tonumber(radius) or 0.0
+            local z = 0.0
+            
+            -- Options becomes the third parameter
+            options = options
+            -- Radius becomes a default value
+            radius = 3.0
+            
+            coords = vector3(x, y, z)
         else
             print("^1[ERROR] Invalid coords type in CreateSafeCircleZone export: " .. type(coords) .. "^7")
             coords = vector3(0.0, 0.0, 0.0)
@@ -308,6 +317,6 @@ exports('CreateSafeCircleZone', function(coords, radius, options)
         return result
     else
         print("^1[ERROR] Exception in CreateSafeCircleZone: " .. tostring(result) .. "^7")
-        return CreateLocalCircleZone(vector3(0, 0, 0), 1.0, {name = "error_zone"})
+        return CreateLocalCircleZone(vector3(0.0, 0.0, 0.0), 1.0, {name = "error_zone"})
     end
 end) 
