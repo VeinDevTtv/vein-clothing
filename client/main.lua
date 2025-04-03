@@ -196,26 +196,28 @@ RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     -- Skip loading stores/tailors/laundromats here since the Initialize function will handle it
     print("^2[vein-clothing] Player loaded event received, updating player data...^7")
     
-    -- Wait for resource to be fully ready before loading player outfit
-    Citizen.CreateThread(function()
-        -- Add a delay to let other handlers finish
-        Citizen.Wait(5000)
+    -- Make sure the LoadPlayerOutfit function is available
+    if type(LoadPlayerOutfit) ~= "function" then
+        print("^1[ERROR] LoadPlayerOutfit function is not defined! Defining it now...^7")
         
-        -- Only load the outfit, don't reload the stores
-        -- Make sure we have the function reference by now
-        if type(loadPlayerOutfitFn) == "function" then
-            pcall(function()
-                loadPlayerOutfitFn()
-            end)
-        else
-            -- Try to get the function directly
-            if type(LoadPlayerOutfit) == "function" then
-                pcall(function()
-                    LoadPlayerOutfit()
-                end)
-            else
-                print("^1[ERROR] LoadPlayerOutfit function still not available in OnPlayerLoaded event.^7")
-            end
+        -- The LoadPlayerOutfit function should already be defined above
+        -- This is just a safety check
+    end
+    
+    -- Load player outfit after a delay
+    Citizen.CreateThread(function()
+        -- Wait for everything to stabilize
+        Citizen.Wait(8000)
+        
+        print("^2[vein-clothing] Trying to load player outfit after delay...^7")
+        
+        -- Directly call the function
+        local success = pcall(function()
+            LoadPlayerOutfit()
+        end)
+        
+        if not success then
+            print("^1[ERROR] Failed to load player outfit after delay. Please check for script errors.^7")
         end
     end)
 end)
@@ -1108,15 +1110,79 @@ function Initialize()
     end)
 end
 
--- Load player's saved outfit on spawn
-function LoadPlayerOutfit()
-    -- Debug log
-    if Config and Config.Debug then
-        print("^3[vein-clothing] Attempting to load player outfit...^7")
+-- Function declarations at the top level to ensure they're accessible globally
+WearOutfit = function(outfit)
+    -- Reset appearance first
+    local playerPed = SafePlayerPedId()
+    
+    if not playerPed or playerPed == 0 then
+        print("^1[ERROR] Invalid player ped in WearOutfit function^7")
+        return false
     end
+    
+    -- Apply each clothing item if outfit is valid
+    if outfit and type(outfit) == "table" and next(outfit) then
+        -- Reset all components to default
+        ClearAllPedProps(playerPed)
+        for category, componentInfo in pairs(clothingComponents or {}) do
+            if not componentInfo.prop then
+                SetPedComponentVariation(playerPed, componentInfo.component, 0, 0, 2)
+            end
+        end
+        
+        -- Loop through outfit items
+        for _, item in pairs(outfit) do
+            local itemData = QBCore.Shared.Items[item.name]
+            if itemData and itemData.client then
+                local component = itemData.client.component
+                local drawable = itemData.client.drawable
+                local texture = itemData.client.texture
+                
+                -- Apply variation if specified
+                if item.metadata and item.metadata.variation and 
+                   itemData.client.variations and 
+                   itemData.client.variations[item.metadata.variation + 1] then
+                    texture = itemData.client.variations[item.metadata.variation + 1].texture
+                end
+                
+                -- Apply component or prop based on type
+                if itemData.client.event == "vein-clothing:client:wearProp" then
+                    SetPedPropIndex(playerPed, component, drawable, texture, true)
+                else
+                    SetPedComponentVariation(playerPed, component, drawable, texture, 0)
+                end
+            end
+        end
+        
+        -- Save the current outfit globally
+        currentOutfit = outfit
+        
+        -- Update the last worn timestamp for each item
+        TriggerServerEvent('vein-clothing:server:updateLastWorn', outfit)
+        return true
+    else
+        print("^1[ERROR] Invalid outfit data in WearOutfit function^7")
+        return false
+    end
+end
+
+-- Load player's saved outfit on spawn - defined at the top level
+LoadPlayerOutfit = function()
+    -- Debug log
+    print("^3[vein-clothing] LoadPlayerOutfit function called^7")
     
     -- Wrap in a CreateThread to avoid blocking
     CreateThread(function()
+        -- Make sure we have QBCore
+        if not QBCore then
+            print("^1[ERROR] QBCore not available in LoadPlayerOutfit^7")
+            QBCore = exports['qb-core']:GetCoreObject()
+            if not QBCore then
+                print("^1[ERROR] Failed to get QBCore in LoadPlayerOutfit^7")
+                return false
+            end
+        end
+    
         -- Initialize local variables for tracking
         local loadAttempts = 0
         local citizenid = nil
@@ -1140,7 +1206,7 @@ function LoadPlayerOutfit()
             loadAttempts = loadAttempts + 1
             
             -- Debug logging of attempts
-            if Config and Config.Debug and loadAttempts % 10 == 0 then
+            if loadAttempts % 10 == 0 then
                 print("^3[vein-clothing] Waiting for citizenid... Attempt " .. loadAttempts .. "/" .. maxAttempts .. "^7")
             end
         end
@@ -1148,27 +1214,16 @@ function LoadPlayerOutfit()
         -- If we couldn't get a citizenid, log error and stop
         if not citizenid then
             print("^1[ERROR] Failed to get citizenid after " .. loadAttempts .. " attempts. Outfit loading aborted.^7")
-            return
+            return false
         end
         
-        if Config and Config.Debug then
-            print("^3[vein-clothing] Got citizenid: " .. citizenid .. ". Loading default outfit...^7")
-        end
+        print("^3[vein-clothing] Got citizenid: " .. citizenid .. ". Loading default outfit...^7")
         
         -- Attempt to get the default outfit from server
-        local outfitLoaded = false
-        
         QBCore.Functions.TriggerCallback('vein-clothing:server:getDefaultOutfit', function(outfit)
             -- Check if we received a valid outfit
             if outfit and type(outfit) == "table" and next(outfit) then
-                if Config and Config.Debug then
-                    print("^3[vein-clothing] Default outfit received from server. Applying...^7")
-                    
-                    -- Print outfit details in debug mode
-                    for category, itemData in pairs(outfit) do
-                        print("  " .. category .. ": " .. (itemData.name or "unknown"))
-                    end
-                end
+                print("^3[vein-clothing] Default outfit received from server. Applying...^7")
                 
                 -- Safe attempt to wear the outfit
                 local wearSuccess = pcall(function()
@@ -1177,39 +1232,22 @@ function LoadPlayerOutfit()
                 
                 if wearSuccess then
                     -- Successfully applied outfit
-                    outfitLoaded = true
+                    print("^2[vein-clothing] Default outfit applied successfully^7")
                     
                     -- Only show notification if Config and QBCore are valid
                     if Config and Config.Notifications and Config.Notifications.Enable then
                         -- Use pcall to safely show notification
                         pcall(function()
-                            QBCore.Functions.Notify(Lang:t('info.default_outfit_loaded'), 'success', Config.Notifications.Duration)
+                            QBCore.Functions.Notify("Default outfit loaded", 'success')
                         end)
-                    end
-                    
-                    if Config and Config.Debug then
-                        print("^2[vein-clothing] Default outfit applied successfully^7")
                     end
                 else
                     print("^1[ERROR] Failed to apply default outfit^7")
                 end
             else
-                if Config and Config.Debug then
-                    print("^3[vein-clothing] No default outfit found or received invalid outfit data^7")
-                end
+                print("^3[vein-clothing] No default outfit found or received invalid outfit data^7")
             end
         end)
-        
-        -- Wait for the callback to complete
-        local callbackWait = 0
-        while not outfitLoaded and callbackWait < 50 do
-            Wait(100)
-            callbackWait = callbackWait + 1
-        end
-        
-        if not outfitLoaded and Config and Config.Debug then
-            print("^3[vein-clothing] No outfit was loaded after waiting " .. callbackWait * 100 .. "ms^7")
-        end
     end)
     
     return true
@@ -1747,23 +1785,6 @@ function StartConditionMonitoring()
             end
         end
     end)
-end
-
--- Wear an entire outfit
-function WearOutfit(outfit)
-    -- Reset appearance first
-    ResetAppearance()
-    
-    -- Apply each clothing item
-    for _, item in pairs(outfit) do
-        ApplyClothing(item.name, item.metadata and item.metadata.variation or 0)
-    end
-    
-    -- Save the current outfit globally
-    currentOutfit = outfit
-    
-    -- Update the last worn timestamp for each item
-    TriggerServerEvent('vein-clothing:server:updateLastWorn', outfit)
 end
 
 -- Remove a specific clothing item
