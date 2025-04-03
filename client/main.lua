@@ -8,119 +8,6 @@ local clothingPeds = {}
 local storeNPCs = {}
 local storeZones = {}
 
--- Replace forward declarations with better implementation
--- Instead of creating placeholder functions, we'll explicitly validate that functions
--- exist before calling them in the Initialize function
-local loadStoresFn
-local loadLaundromatsFn
-local loadTailorsFn
-local loadPlayerOutfitFn
-
--- Ensure Config exists
-if not Config then
-    Config = {}
-    print("^1[ERROR] Config not found. Make sure config.lua is loaded before this file.^7")
-end
-
--- Create mock functions for CircleZone if PolyZone is not available
-local mockDestroy = function() end
-local mockOnPlayerInOut = function(cb) end
-
--- Mock CircleZone implementation for when PolyZone is not available
-local MockCircleZone = {}
-MockCircleZone.__index = MockCircleZone
-
--- Import PolyZone for zone creation if available
-local CircleZone = nil
-
--- Safely attempt to load PolyZone
-Citizen.CreateThread(function()
-    -- Wait a moment for all resources to load
-    Citizen.Wait(500)
-    
-    -- Check if PolyZone is available
-    if GetResourceState('PolyZone') ~= 'missing' then
-        -- Try to fetch the CircleZone from PolyZone
-        local success, result = pcall(function()
-            return exports['PolyZone']:GetCircleZone()
-        end)
-        
-        if success and result then
-            -- Successfully got CircleZone from PolyZone
-            CircleZone = result
-            print("^2[vein-clothing] Successfully loaded CircleZone from PolyZone^7")
-        else
-            -- Try alternative export method
-            success, result = pcall(function()
-                -- Create a test zone to verify the export works
-                local testZone = exports['PolyZone']:CreateCircleZone(
-                    vector3(0, 0, 0),  -- Far away test location
-                    1.0,                -- Small radius
-                    { name = "test_zone" }
-                )
-                testZone:destroy()     -- Clean up test zone
-                
-                -- Return a wrapper that uses the exports directly
-                return {
-                    Create = function(coords, radius, options)
-                        return exports['PolyZone']:CreateCircleZone(coords, radius, options)
-                    end
-                }
-            end)
-            
-            if success and result then
-                CircleZone = result
-                print("^2[vein-clothing] Successfully created CircleZone wrapper for PolyZone^7")
-            else
-                -- Use mock implementation as fallback
-                print("^3[vein-clothing] PolyZone found but could not access CircleZone, using fallback implementation^7")
-                CircleZone = CreateMockCircleZone()
-            end
-        end
-    else
-        -- PolyZone not available, use mock implementation
-        print("^3[vein-clothing] PolyZone resource not found, using fallback zone implementation^7")
-        CircleZone = CreateMockCircleZone()
-    end
-end)
-
--- Creates a mock implementation of CircleZone that does nothing but prevents errors
-function CreateMockCircleZone()
-    local MockCircleZone = {}
-    
-    -- Constructor function that returns a mock zone object
-    MockCircleZone.Create = function(coords, radius, options)
-        local mockZone = {
-            -- Store the creation parameters
-            coords = coords,
-            radius = radius,
-            options = options or {},
-            
-            -- Callbacks storage
-            callbacks = {},
-            
-            -- Mock destroy method
-            destroy = function(self)
-                -- Clear any references to allow proper garbage collection
-                self.callbacks = {}
-                return true
-            end,
-            
-            -- Mock onPlayerInOut method
-            onPlayerInOut = function(self, cb)
-                if type(cb) == "function" then
-                    table.insert(self.callbacks, cb)
-                end
-                return self
-            end
-        }
-        
-        return mockZone
-    end
-    
-    return MockCircleZone
-end
-
 -- Global variables for the clothing system
 currentOutfit = {}
 currentStore = nil
@@ -150,21 +37,7 @@ local clothingComponents = {
     accessories = {component = 7, texture = 0}
 }
 
--- Add this near the top of the file, after QBCore initialization
--- local ClothingConfig = exports['vein-clothing']:GetClothingConfig()
-local ClothingConfig = {}
-
--- Function to get clothing config for an item
-function GetClothingConfig(itemName)
-    -- Use QBCore.Shared.Items directly instead of a possibly circular reference
-    local item = QBCore.Shared.Items[itemName]
-    if item and item.client then
-        return item.client
-    end
-    return nil
-end
-
--- Add this safety function near the top of the file
+-- Add this safety function at the top of the file
 local function SafePlayerPedId()
     local ped = PlayerPedId()
     local attempts = 0
@@ -182,12 +55,739 @@ local function SafePlayerPedId()
     end
     
     -- Log warning if we couldn't get a valid ped after multiple attempts
-    if not ped or ped == 0 then
+    if (not ped or ped == 0) and Config and Config.Debug then
         print("^1[ERROR] Failed to get a valid PlayerPedId after " .. attempts .. " attempts^7")
     end
     
     return ped or 0  -- Return 0 as fallback if ped is still nil
 end
+
+-- Add this near the top of the file, after QBCore initialization
+local ClothingConfig = {}
+
+-- DEFINE CRITICAL FUNCTIONS EARLY
+
+-- Wear an outfit - defined early to ensure availability
+function WearOutfit(outfit)
+    -- Reset appearance first
+    local playerPed = SafePlayerPedId()
+    
+    if not playerPed or playerPed == 0 then
+        print("^1[ERROR] Invalid player ped in WearOutfit function^7")
+        return false
+    end
+    
+    -- Apply each clothing item if outfit is valid
+    if outfit and type(outfit) == "table" and next(outfit) then
+        -- Reset all components to default
+        ClearAllPedProps(playerPed)
+        for category, componentInfo in pairs(clothingComponents or {}) do
+            if not componentInfo.prop then
+                SetPedComponentVariation(playerPed, componentInfo.component, 0, 0, 2)
+            end
+        end
+        
+        -- Loop through outfit items
+        for _, item in pairs(outfit) do
+            local itemData = QBCore.Shared.Items[item.name]
+            if itemData and itemData.client then
+                local component = itemData.client.component
+                local drawable = itemData.client.drawable
+                local texture = itemData.client.texture
+                
+                -- Apply variation if specified
+                if item.metadata and item.metadata.variation and 
+                   itemData.client.variations and 
+                   itemData.client.variations[item.metadata.variation + 1] then
+                    texture = itemData.client.variations[item.metadata.variation + 1].texture
+                end
+                
+                -- Apply component or prop based on type
+                if itemData.client.event == "vein-clothing:client:wearProp" then
+                    SetPedPropIndex(playerPed, component, drawable, texture, true)
+                else
+                    SetPedComponentVariation(playerPed, component, drawable, texture, 0)
+                end
+            end
+        end
+        
+        -- Save the current outfit globally
+        currentOutfit = outfit
+        
+        -- Update the last worn timestamp for each item
+        TriggerServerEvent('vein-clothing:server:updateLastWorn', outfit)
+        return true
+    else
+        print("^1[ERROR] Invalid outfit data in WearOutfit function^7")
+        return false
+    end
+end
+
+-- Reset player appearance to default - defined early
+function ResetAppearance()
+    local playerPed = SafePlayerPedId()
+    
+    -- Clear all props
+    ClearAllPedProps(playerPed)
+    
+    -- Reset all components to default
+    for category, componentInfo in pairs(clothingComponents) do
+        if not componentInfo.prop then
+            SetPedComponentVariation(playerPed, componentInfo.component, 0, 0, 2)
+        end
+    end
+    
+    -- Reset current outfit
+    currentOutfit = {}
+end
+
+-- Create store blips on the map - defined early
+function LoadStores()
+    -- Debug log
+    if Config and Config.Debug then
+        print("^3[vein-clothing] LoadStores function called^7")
+    end
+    
+    -- Check if Config is loaded
+    if not Config then
+        print("^1[ERROR] Config not found in LoadStores. Make sure config.lua is loaded before client/main.lua^7")
+        return false
+    end
+    
+    -- Check if Config.Stores exists
+    if not Config.Stores then
+        print("^1[ERROR] Config.Stores not found in LoadStores. Make sure config.lua is properly configured.^7")
+        return false
+    end
+    
+    -- Remove existing blips first
+    if currentStoreBlip then
+        RemoveBlip(currentStoreBlip)
+        currentStoreBlip = nil
+    end
+    
+    -- Clear existing NPCs
+    if storeNPCs then
+        for _, npc in pairs(storeNPCs) do
+            if DoesEntityExist(npc.handle) then
+                DeleteEntity(npc.handle)
+            end
+        end
+    end
+    storeNPCs = storeNPCs or {}
+    
+    -- Clear existing zones
+    if storeZones then
+        for _, zone in pairs(storeZones) do
+            if zone and zone.destroy then
+                zone:destroy()
+            end
+        end
+    end
+    storeZones = storeZones or {}
+    
+    local storesCount = 0
+    local npcCount = 0
+    
+    -- Create new blips and NPCs
+    for storeType, storeData in pairs(Config.Stores) do
+        if Config and Config.Debug then
+            print("^3[vein-clothing] Setting up store: " .. storeType .. "^7")
+        end
+        
+        -- Skip if store data is invalid
+        if not storeData or not storeData.locations then
+            print("^1[ERROR] Invalid store data for " .. storeType .. "^7")
+            goto continue
+        end
+        
+        for i, location in ipairs(storeData.locations) do
+            storesCount = storesCount + 1
+            
+            -- Verify location data
+            if not location or not location.x or not location.y or not location.z then
+                print("^1[ERROR] Invalid location data for " .. storeType .. " at index " .. i .. "^7")
+                goto continue_location
+            end
+            
+            -- Create blip
+            local blip = AddBlipForCoord(location.x, location.y, location.z)
+            SetBlipSprite(blip, storeData.blip and storeData.blip.sprite or 73)
+            SetBlipDisplay(blip, 4)
+            SetBlipScale(blip, storeData.blip and storeData.blip.scale or 0.7)
+            SetBlipColour(blip, storeData.blip and storeData.blip.color or 0)
+            SetBlipAsShortRange(blip, true)
+            BeginTextCommandSetBlipName("STRING")
+            AddTextComponentString(storeData.label or "Clothing Store")
+            EndTextCommandSetBlipName(blip)
+            
+            -- Create store clerk NPC
+            local modelName = storeData.clerk and storeData.clerk.model or "a_f_y_business_01"
+            local modelHash = GetHashKey(modelName)
+            
+            if Config and Config.Debug then
+                print("^3[vein-clothing] Attempting to load model: " .. modelName .. " (Hash: " .. modelHash .. ")^7")
+            end
+            
+            -- Request model with proper error handling
+            RequestModel(modelHash)
+            
+            local timeout = 0
+            local modelLoaded = false
+            
+            -- Wait for model to load with timeout
+            while not HasModelLoaded(modelHash) and timeout < 30 do
+                Wait(100)
+                timeout = timeout + 1
+                if Config and Config.Debug and timeout % 10 == 0 then
+                    print("^3[vein-clothing] Still waiting for model to load: " .. modelName .. " (Attempt " .. timeout .. "/30)^7")
+                end
+            end
+            
+            modelLoaded = HasModelLoaded(modelHash)
+            
+            if not modelLoaded then
+                print("^1[ERROR] Failed to load model " .. modelName .. " after 30 attempts. Using fallback model.^7")
+                
+                -- Try fallback model
+                modelName = "a_f_y_business_01"  -- Fallback to a common model
+                modelHash = GetHashKey(modelName)
+                RequestModel(modelHash)
+                
+                timeout = 0
+                while not HasModelLoaded(modelHash) and timeout < 30 do
+                    Wait(100)
+                    timeout = timeout + 1
+                end
+                
+                modelLoaded = HasModelLoaded(modelHash)
+                
+                if not modelLoaded then
+                    print("^1[ERROR] Failed to load fallback model. Skipping NPC creation for this store.^7")
+                    goto continue_location
+                end
+            end
+            
+            if Config and Config.Debug then
+                print("^3[vein-clothing] Model loaded successfully: " .. modelName .. "^7")
+            end
+            
+            -- Safety check for position
+            local safeX, safeY, safeZ = location.x, location.y, location.z - 1.0
+            local safeW = location.w or 0.0
+            
+            local npc = CreatePed(4, modelHash, safeX, safeY, safeZ, safeW, false, true)
+            
+            if DoesEntityExist(npc) then
+                npcCount = npcCount + 1
+                
+                if Config and Config.Debug then
+                    print("^3[vein-clothing] NPC created successfully at location: " .. 
+                        safeX .. ", " .. safeY .. ", " .. safeZ .. "^7")
+                end
+                
+                -- Make sure the NPC is properly configured
+                if not IsEntityDead(npc) then
+                    FreezeEntityPosition(npc, true)
+                    SetEntityInvincible(npc, true)
+                    SetBlockingOfNonTemporaryEvents(npc, true)
+                    
+                    -- Apply animation with a safe default
+                    local scenario = "WORLD_HUMAN_STAND_IMPATIENT"
+                    if storeData.clerk and storeData.clerk.scenario then
+                        scenario = storeData.clerk.scenario
+                    end
+                    
+                    -- Use pcall to handle any scenario errors
+                    local scenarioSuccess = pcall(function()
+                        TaskStartScenarioInPlace(npc, scenario, 0, true)
+                    end)
+                    
+                    if not scenarioSuccess and Config and Config.Debug then
+                        print("^3[WARNING] Failed to start scenario " .. scenario .. " for NPC. Using default.^7")
+                        TaskStartScenarioInPlace(npc, "WORLD_HUMAN_STAND_IMPATIENT", 0, true)
+                    end
+                    
+                    -- Store reference to NPC
+                    table.insert(storeNPCs, {
+                        handle = npc, 
+                        type = storeType, 
+                        index = i,
+                        location = location
+                    })
+                    
+                    -- Add target interaction if enabled
+                    if Config and Config.UseTarget then
+                        if Config and Config.Debug then
+                            print("^3[vein-clothing] Adding qb-target to clerk NPC^7")
+                        end
+                        
+                        if GetResourceState('qb-target') ~= 'missing' then
+                            -- Use pcall to avoid crashing if target export fails
+                            pcall(function()
+                                exports['qb-target']:AddTargetEntity(npc, {
+                                    options = {
+                                        {
+                                            type = "client",
+                                            event = "vein-clothing:client:openStore",
+                                            icon = "fas fa-tshirt",
+                                            label = "Browse " .. (storeData.label or "Clothing Store"),
+                                            args = {
+                                                store = storeType
+                                            }
+                                        }
+                                    },
+                                    distance = Config and Config.PlayerInteraction and Config.PlayerInteraction.MaxDistance or 3.0
+                                })
+                            end)
+                        else
+                            print("^3[WARNING] qb-target not found, disabling targeting for store clerks^7")
+                        end
+                    elseif CircleZone then
+                        -- Create interaction zone if CircleZone is available and not using qb-target
+                        -- Use pcall to avoid crashing if zone creation fails
+                        pcall(function() 
+                            local zone = CircleZone.Create(
+                                vector3(location.x, location.y, location.z), 
+                                2.0, 
+                                {
+                                    name = storeType .. "_" .. i,
+                                    debugPoly = Config and Config.Debug,
+                                    useZ = true
+                                }
+                            )
+                            
+                            zone:onPlayerInOut(function(isPointInside)
+                                if isPointInside then
+                                    currentStore = storeType
+                                    inStore = true
+                                    QBCore.Functions.Notify("Press [E] to browse " .. (storeData.label or "Clothing Store"), "primary", 5000)
+                                else
+                                    inStore = false
+                                    currentStore = nil
+                                end
+                            end)
+                            
+                            table.insert(storeZones, zone)
+                        end)
+                    end
+                else
+                    if Config and Config.Debug then
+                        print("^1[ERROR] NPC was created but is dead. Deleting entity.^7")
+                    end
+                    DeleteEntity(npc)
+                end
+            else
+                print("^1[ERROR] Failed to create NPC at location " .. 
+                    safeX .. ", " .. safeY .. ", " .. safeZ .. "^7")
+            end
+            
+            -- Free model regardless of success
+            SetModelAsNoLongerNeeded(modelHash)
+            
+            ::continue_location::
+        end
+        
+        ::continue::
+    end
+    
+    if Config and Config.Debug then
+        print("^3[vein-clothing] Successfully loaded " .. npcCount .. " store NPCs out of " .. storesCount .. " configured locations^7")
+    end
+    
+    return true
+end
+
+-- Load laundromat locations - defined early
+function LoadLaundromats()
+    if not Config then
+        print("^1[ERROR] Config not found in LoadLaundromats. Make sure config.lua is loaded first.^7")
+        return false
+    end
+    
+    if not Config.Laundromats then
+        print("^1[ERROR] Config.Laundromats not found in LoadLaundromats.^7")
+        return false
+    end
+    
+    if Config and Config.Debug then
+        print("^3[vein-clothing] Loading laundromats...^7")
+    end
+    
+    for i, location in ipairs(Config.Laundromats) do
+        -- Skip if location data is invalid
+        if not location or not location.coords then
+            print("^1[ERROR] Invalid laundromat data at index " .. i .. "^7")
+            goto continue
+        end
+        
+        -- Create blip
+        local blip = AddBlipForCoord(location.coords.x, location.coords.y, location.coords.z)
+        local blipData = location.blip or {}
+        SetBlipSprite(blip, blipData.sprite or 73)
+        SetBlipDisplay(blip, 4)
+        SetBlipScale(blip, blipData.scale or 0.7)
+        SetBlipColour(blip, blipData.color or 3)
+        SetBlipAsShortRange(blip, true)
+        BeginTextCommandSetBlipName("STRING")
+        AddTextComponentString(blipData.label or "Laundromat")
+        EndTextCommandSetBlipName(blip)
+        
+        -- Create laundromat NPC
+        local model = GetHashKey("s_f_y_shop_mid")
+        RequestModel(model)
+        
+        local timeout = 0
+        while not HasModelLoaded(model) and timeout < 50 do
+            Wait(100)
+            timeout = timeout + 1
+        end
+        
+        if not HasModelLoaded(model) then
+            print("^1[ERROR] Failed to load model for laundromat at index " .. i .. "^7")
+            goto continue
+        end
+        
+        local npc = CreatePed(4, model, location.coords.x, location.coords.y, location.coords.z - 1.0, location.coords.w or 0.0, false, true)
+        
+        if not DoesEntityExist(npc) then
+            print("^1[ERROR] Failed to create ped for laundromat at index " .. i .. "^7")
+            goto continue
+        end
+        
+        FreezeEntityPosition(npc, true)
+        SetEntityInvincible(npc, true)
+        SetBlockingOfNonTemporaryEvents(npc, true)
+        TaskStartScenarioInPlace(npc, "WORLD_HUMAN_STAND_IMPATIENT", 0, true)
+        
+        table.insert(storeNPCs, {
+            handle = npc, 
+            type = "laundromat", 
+            index = i,
+            location = location.coords
+        })
+        
+        -- Add target interaction
+        if Config and Config.UseTarget then
+            if GetResourceState('qb-target') ~= 'missing' then
+                exports['qb-target']:AddTargetEntity(npc, {
+                    options = {
+                        {
+                            type = "client",
+                            event = "vein-clothing:client:openLaundromat",
+                            icon = "fas fa-soap",
+                            label = "Use Laundromat"
+                        }
+                    },
+                    distance = Config.PlayerInteraction and Config.PlayerInteraction.MaxDistance or 3.0
+                })
+            else
+                print("^3[WARNING] qb-target not found, disabling targeting for laundromat NPCs^7")
+            end
+        elseif CircleZone then
+            -- Create interaction zone
+            local zone = CircleZone.Create(
+                vector3(location.coords.x, location.coords.y, location.coords.z), 
+                2.0, 
+                {
+                    name = "laundromat_" .. i,
+                    debugPoly = Config and Config.Debug,
+                    useZ = true
+                }
+            )
+            
+            zone:onPlayerInOut(function(isPointInside)
+                if isPointInside then
+                    isInLaundromat = true
+                    QBCore.Functions.Notify("Press [E] to use the laundromat", "primary", 5000)
+                else
+                    isInLaundromat = false
+                end
+            end)
+            
+            table.insert(storeZones, zone)
+        end
+        
+        SetModelAsNoLongerNeeded(model)
+        
+        ::continue::
+    end
+    
+    if Config and Config.Debug then
+        local count = 0
+        for _, npc in pairs(storeNPCs) do
+            if npc.type == "laundromat" then
+                count = count + 1
+            end
+        end
+        print("^3[vein-clothing] Successfully loaded " .. count .. " laundromats^7")
+    end
+    
+    return true
+end
+
+-- Load tailor shop locations - defined early
+function LoadTailors()
+    if not Config then
+        print("^1[ERROR] Config not found in LoadTailors. Make sure config.lua is loaded first.^7")
+        return false
+    end
+    
+    if not Config.Tailors then
+        print("^1[ERROR] Config.Tailors not found in LoadTailors.^7")
+        return false
+    end
+    
+    if Config and Config.Debug then
+        print("^3[vein-clothing] Loading tailors...^7")
+    end
+    
+    for i, location in ipairs(Config.Tailors) do
+        -- Skip if location data is invalid
+        if not location or not location.coords then
+            print("^1[ERROR] Invalid tailor data at index " .. i .. "^7")
+            goto continue
+        end
+        
+        -- Create blip
+        local blip = AddBlipForCoord(location.coords.x, location.coords.y, location.coords.z)
+        local blipData = location.blip or {}
+        SetBlipSprite(blip, blipData.sprite or 73)
+        SetBlipDisplay(blip, 4)
+        SetBlipScale(blip, blipData.scale or 0.7)
+        SetBlipColour(blip, blipData.color or 4)
+        SetBlipAsShortRange(blip, true)
+        BeginTextCommandSetBlipName("STRING")
+        AddTextComponentString(blipData.label or "Tailor Shop")
+        EndTextCommandSetBlipName(blip)
+        
+        -- Create tailor NPC
+        local model = GetHashKey("s_m_m_tailor_01")
+        RequestModel(model)
+        
+        local timeout = 0
+        while not HasModelLoaded(model) and timeout < 50 do
+            Wait(100)
+            timeout = timeout + 1
+        end
+        
+        if not HasModelLoaded(model) then
+            print("^1[ERROR] Failed to load model for tailor at index " .. i .. "^7")
+            goto continue
+        end
+        
+        local npc = CreatePed(4, model, location.coords.x, location.coords.y, location.coords.z - 1.0, location.coords.w or 0.0, false, true)
+        
+        if not DoesEntityExist(npc) then
+            print("^1[ERROR] Failed to create ped for tailor at index " .. i .. "^7")
+            goto continue
+        end
+        
+        FreezeEntityPosition(npc, true)
+        SetEntityInvincible(npc, true)
+        SetBlockingOfNonTemporaryEvents(npc, true)
+        TaskStartScenarioInPlace(npc, "WORLD_HUMAN_STAND_IMPATIENT", 0, true)
+        
+        table.insert(storeNPCs, {
+            handle = npc, 
+            type = "tailor", 
+            index = i,
+            location = location.coords
+        })
+        
+        -- Add target interaction
+        if Config and Config.UseTarget then
+            if GetResourceState('qb-target') ~= 'missing' then
+                exports['qb-target']:AddTargetEntity(npc, {
+                    options = {
+                        {
+                            type = "client",
+                            event = "vein-clothing:client:openTailor",
+                            icon = "fas fa-cut",
+                            label = "Use Tailor Services"
+                        }
+                    },
+                    distance = Config.PlayerInteraction and Config.PlayerInteraction.MaxDistance or 3.0
+                })
+            else
+                print("^3[WARNING] qb-target not found, disabling targeting for tailor NPCs^7")
+            end
+        elseif CircleZone then
+            -- Create interaction zone
+            local zone = CircleZone.Create(
+                vector3(location.coords.x, location.coords.y, location.coords.z), 
+                2.0, 
+                {
+                    name = "tailor_" .. i,
+                    debugPoly = Config and Config.Debug,
+                    useZ = true
+                }
+            )
+            
+            zone:onPlayerInOut(function(isPointInside)
+                if isPointInside then
+                    isInTailor = true
+                    QBCore.Functions.Notify("Press [E] to use tailor services", "primary", 5000)
+                else
+                    isInTailor = false
+                end
+            end)
+            
+            table.insert(storeZones, zone)
+        end
+        
+        SetModelAsNoLongerNeeded(model)
+        
+        ::continue::
+    end
+    
+    if Config and Config.Debug then
+        local count = 0
+        for _, npc in pairs(storeNPCs) do
+            if npc.type == "tailor" then
+                count = count + 1
+            end
+        end
+        print("^3[vein-clothing] Successfully loaded " .. count .. " tailors^7")
+    end
+    
+    return true
+end
+
+-- Load player's saved outfit on spawn - defined early
+function LoadPlayerOutfit()
+    -- Debug log
+    print("^3[vein-clothing] LoadPlayerOutfit function called^7")
+    
+    -- Wrap in a CreateThread to avoid blocking
+    CreateThread(function()
+        -- Make sure we have QBCore
+        if not QBCore then
+            print("^1[ERROR] QBCore not available in LoadPlayerOutfit^7")
+            QBCore = exports['qb-core']:GetCoreObject()
+            if not QBCore then
+                print("^1[ERROR] Failed to get QBCore in LoadPlayerOutfit^7")
+                return false
+            end
+        end
+    
+        -- Initialize local variables for tracking
+        local loadAttempts = 0
+        local citizenid = nil
+        local maxAttempts = 100  -- 10 second timeout
+        
+        -- Wait until we have a valid citizenid or timeout
+        while loadAttempts < maxAttempts do
+            -- Safe attempt to get player data
+            local success, playerData = pcall(function()
+                return QBCore.Functions.GetPlayerData()
+            end)
+            
+            -- Check if we got valid player data
+            if success and playerData and playerData.citizenid then
+                citizenid = playerData.citizenid
+                break
+            end
+            
+            -- Wait before trying again
+            Wait(100)
+            loadAttempts = loadAttempts + 1
+            
+            -- Debug logging of attempts
+            if loadAttempts % 10 == 0 then
+                print("^3[vein-clothing] Waiting for citizenid... Attempt " .. loadAttempts .. "/" .. maxAttempts .. "^7")
+            end
+        end
+        
+        -- If we couldn't get a citizenid, log error and stop
+        if not citizenid then
+            print("^1[ERROR] Failed to get citizenid after " .. loadAttempts .. " attempts. Outfit loading aborted.^7")
+            return false
+        end
+        
+        print("^3[vein-clothing] Got citizenid: " .. citizenid .. ". Loading default outfit...^7")
+        
+        -- Attempt to get the default outfit from server
+        QBCore.Functions.TriggerCallback('vein-clothing:server:getDefaultOutfit', function(outfit)
+            -- Check if we received a valid outfit
+            if outfit and type(outfit) == "table" and next(outfit) then
+                print("^3[vein-clothing] Default outfit received from server. Applying...^7")
+                
+                -- Safe attempt to wear the outfit
+                local wearSuccess = pcall(function()
+                    WearOutfit(outfit)
+                end)
+                
+                if wearSuccess then
+                    -- Successfully applied outfit
+                    print("^2[vein-clothing] Default outfit applied successfully^7")
+                    
+                    -- Only show notification if Config and QBCore are valid
+                    if Config and Config.Notifications and Config.Notifications.Enable then
+                        -- Use pcall to safely show notification
+                        pcall(function()
+                            QBCore.Functions.Notify("Default outfit loaded", 'success')
+                        end)
+                    end
+                else
+                    print("^1[ERROR] Failed to apply default outfit^7")
+                end
+            else
+                print("^3[vein-clothing] No default outfit found or received invalid outfit data^7")
+            end
+        end)
+    end)
+    
+    return true
+end
+
+-- Ensure Config exists
+if not Config then
+    Config = {}
+    print("^1[ERROR] Config not found. Make sure config.lua is loaded before this file.^7")
+end
+
+-- Create mock functions for CircleZone if PolyZone is not available
+local mockDestroy = function() end
+local mockOnPlayerInOut = function(cb) end
+
+-- Mock CircleZone implementation for when PolyZone is not available
+local MockCircleZone = {}
+MockCircleZone.__index = MockCircleZone
+
+-- Use our PolyzoneHelper for CircleZone functionality
+local CircleZone = nil
+Citizen.CreateThread(function()
+    -- Wait for PolyzoneHelper to initialize
+    Citizen.Wait(2000)
+    
+    -- Try to get CircleZone from the exports
+    local success, result = pcall(function()
+        return exports[GetCurrentResourceName()]:CreateSafeCircleZone
+    end)
+    
+    if success and result then
+        -- We got the function, create a compatible interface
+        CircleZone = {
+            Create = function(coords, radius, options)
+                return result(coords, radius, options)
+            end
+        }
+        print("^2[vein-clothing] Successfully got CircleZone from helper^7")
+    else
+        -- Fallback to simple mock implementation
+        print("^3[vein-clothing] Failed to get CircleZone from helper, using simple mock^7")
+        CircleZone = {
+            Create = function(coords, radius, options)
+                local mockZone = {
+                    destroy = function() return true end,
+                    onPlayerInOut = function(cb) return {} end
+                }
+                return mockZone
+            end
+        }
+    end
+end)
 
 -- Initialize player data
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
@@ -196,29 +796,20 @@ RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     -- Skip loading stores/tailors/laundromats here since the Initialize function will handle it
     print("^2[vein-clothing] Player loaded event received, updating player data...^7")
     
-    -- Make sure the LoadPlayerOutfit function is available
-    if type(LoadPlayerOutfit) ~= "function" then
-        print("^1[ERROR] LoadPlayerOutfit function is not defined! Defining it now...^7")
-        
-        -- The LoadPlayerOutfit function should already be defined above
-        -- This is just a safety check
-    end
-    
-    -- Load player outfit after a delay
+    -- Wait for resource to be fully ready before loading player outfit
     Citizen.CreateThread(function()
-        -- Wait for everything to stabilize
-        Citizen.Wait(8000)
+        -- Add a longer delay to let other handlers finish
+        Citizen.Wait(10000)
         
-        print("^2[vein-clothing] Trying to load player outfit after delay...^7")
-        
-        -- Directly call the function
-        local success = pcall(function()
-            LoadPlayerOutfit()
+        -- Safely attempt to load player outfit
+        pcall(function()
+            if type(LoadPlayerOutfit) == "function" then
+                print("^2[vein-clothing] Trying to load player outfit after delay...^7")
+                LoadPlayerOutfit()
+            else
+                print("^1[ERROR] LoadPlayerOutfit function is still not defined after delay!^7")
+            end
         end)
-        
-        if not success then
-            print("^1[ERROR] Failed to load player outfit after delay. Please check for script errors.^7")
-        end
     end)
 end)
 
@@ -929,33 +1520,6 @@ function Initialize()
     -- Print debug message for initialization start
     print("^2[vein-clothing] Starting initialization process...^7")
     
-    -- Set up local references to functions now that they should be defined
-    loadStoresFn = LoadStores
-    loadLaundromatsFn = LoadLaundromats
-    loadTailorsFn = LoadTailors
-    loadPlayerOutfitFn = LoadPlayerOutfit
-    
-    -- Validate function references
-    if type(loadStoresFn) ~= "function" then
-        print("^1[ERROR] LoadStores function not defined. Store NPCs won't be loaded.^7")
-        loadStoresFn = function() return false end
-    end
-    
-    if type(loadLaundromatsFn) ~= "function" then
-        print("^1[ERROR] LoadLaundromats function not defined. Laundromat NPCs won't be loaded.^7")
-        loadLaundromatsFn = function() return false end
-    end
-    
-    if type(loadTailorsFn) ~= "function" then
-        print("^1[ERROR] LoadTailors function not defined. Tailor NPCs won't be loaded.^7")
-        loadTailorsFn = function() return false end
-    end
-    
-    if type(loadPlayerOutfitFn) ~= "function" then
-        print("^1[ERROR] LoadPlayerOutfit function not defined. Player outfits won't be loaded.^7")
-        loadPlayerOutfitFn = function() return false end
-    end
-    
     -- Wait for QBCore to be fully initialized
     local qbCoreAttempts = 0
     while not QBCore do
@@ -1049,7 +1613,7 @@ function Initialize()
         
         -- Safely call LoadStores with error handling
         pcall(function()
-            storesLoaded = loadStoresFn()
+            storesLoaded = LoadStores()
         end)
         
         if not storesLoaded then
@@ -1061,7 +1625,7 @@ function Initialize()
         
         -- Safely call LoadLaundromats with error handling
         pcall(function()
-            laundromatsLoaded = loadLaundromatsFn()
+            laundromatsLoaded = LoadLaundromats()
         end)
         
         if not laundromatsLoaded then
@@ -1073,7 +1637,7 @@ function Initialize()
         
         -- Safely call LoadTailors with error handling
         pcall(function()
-            tailorsLoaded = loadTailorsFn()
+            tailorsLoaded = LoadTailors()
         end)
         
         if not tailorsLoaded then
@@ -1085,7 +1649,7 @@ function Initialize()
         
         -- Safely call LoadPlayerOutfit with error handling
         pcall(function()
-            loadPlayerOutfitFn()
+            LoadPlayerOutfit()
             outfitLoaded = true
         end)
         
@@ -1110,1035 +1674,6 @@ function Initialize()
     end)
 end
 
--- Function declarations at the top level to ensure they're accessible globally
-WearOutfit = function(outfit)
-    -- Reset appearance first
-    local playerPed = SafePlayerPedId()
-    
-    if not playerPed or playerPed == 0 then
-        print("^1[ERROR] Invalid player ped in WearOutfit function^7")
-        return false
-    end
-    
-    -- Apply each clothing item if outfit is valid
-    if outfit and type(outfit) == "table" and next(outfit) then
-        -- Reset all components to default
-        ClearAllPedProps(playerPed)
-        for category, componentInfo in pairs(clothingComponents or {}) do
-            if not componentInfo.prop then
-                SetPedComponentVariation(playerPed, componentInfo.component, 0, 0, 2)
-            end
-        end
-        
-        -- Loop through outfit items
-        for _, item in pairs(outfit) do
-            local itemData = QBCore.Shared.Items[item.name]
-            if itemData and itemData.client then
-                local component = itemData.client.component
-                local drawable = itemData.client.drawable
-                local texture = itemData.client.texture
-                
-                -- Apply variation if specified
-                if item.metadata and item.metadata.variation and 
-                   itemData.client.variations and 
-                   itemData.client.variations[item.metadata.variation + 1] then
-                    texture = itemData.client.variations[item.metadata.variation + 1].texture
-                end
-                
-                -- Apply component or prop based on type
-                if itemData.client.event == "vein-clothing:client:wearProp" then
-                    SetPedPropIndex(playerPed, component, drawable, texture, true)
-                else
-                    SetPedComponentVariation(playerPed, component, drawable, texture, 0)
-                end
-            end
-        end
-        
-        -- Save the current outfit globally
-        currentOutfit = outfit
-        
-        -- Update the last worn timestamp for each item
-        TriggerServerEvent('vein-clothing:server:updateLastWorn', outfit)
-        return true
-    else
-        print("^1[ERROR] Invalid outfit data in WearOutfit function^7")
-        return false
-    end
-end
-
--- Load player's saved outfit on spawn - defined at the top level
-LoadPlayerOutfit = function()
-    -- Debug log
-    print("^3[vein-clothing] LoadPlayerOutfit function called^7")
-    
-    -- Wrap in a CreateThread to avoid blocking
-    CreateThread(function()
-        -- Make sure we have QBCore
-        if not QBCore then
-            print("^1[ERROR] QBCore not available in LoadPlayerOutfit^7")
-            QBCore = exports['qb-core']:GetCoreObject()
-            if not QBCore then
-                print("^1[ERROR] Failed to get QBCore in LoadPlayerOutfit^7")
-                return false
-            end
-        end
-    
-        -- Initialize local variables for tracking
-        local loadAttempts = 0
-        local citizenid = nil
-        local maxAttempts = 100  -- 10 second timeout
-        
-        -- Wait until we have a valid citizenid or timeout
-        while loadAttempts < maxAttempts do
-            -- Safe attempt to get player data
-            local success, playerData = pcall(function()
-                return QBCore.Functions.GetPlayerData()
-            end)
-            
-            -- Check if we got valid player data
-            if success and playerData and playerData.citizenid then
-                citizenid = playerData.citizenid
-                break
-            end
-            
-            -- Wait before trying again
-            Wait(100)
-            loadAttempts = loadAttempts + 1
-            
-            -- Debug logging of attempts
-            if loadAttempts % 10 == 0 then
-                print("^3[vein-clothing] Waiting for citizenid... Attempt " .. loadAttempts .. "/" .. maxAttempts .. "^7")
-            end
-        end
-        
-        -- If we couldn't get a citizenid, log error and stop
-        if not citizenid then
-            print("^1[ERROR] Failed to get citizenid after " .. loadAttempts .. " attempts. Outfit loading aborted.^7")
-            return false
-        end
-        
-        print("^3[vein-clothing] Got citizenid: " .. citizenid .. ". Loading default outfit...^7")
-        
-        -- Attempt to get the default outfit from server
-        QBCore.Functions.TriggerCallback('vein-clothing:server:getDefaultOutfit', function(outfit)
-            -- Check if we received a valid outfit
-            if outfit and type(outfit) == "table" and next(outfit) then
-                print("^3[vein-clothing] Default outfit received from server. Applying...^7")
-                
-                -- Safe attempt to wear the outfit
-                local wearSuccess = pcall(function()
-                    WearOutfit(outfit)
-                end)
-                
-                if wearSuccess then
-                    -- Successfully applied outfit
-                    print("^2[vein-clothing] Default outfit applied successfully^7")
-                    
-                    -- Only show notification if Config and QBCore are valid
-                    if Config and Config.Notifications and Config.Notifications.Enable then
-                        -- Use pcall to safely show notification
-                        pcall(function()
-                            QBCore.Functions.Notify("Default outfit loaded", 'success')
-                        end)
-                    end
-                else
-                    print("^1[ERROR] Failed to apply default outfit^7")
-                end
-            else
-                print("^3[vein-clothing] No default outfit found or received invalid outfit data^7")
-            end
-        end)
-    end)
-    
-    return true
-end
-
--- Create store blips on the map
-function LoadStores()
-    -- Debug log
-    if Config.Debug then
-        print("^3[vein-clothing] Loading stores...^7")
-    end
-    
-    -- Check if Config is loaded
-    if not Config then
-        print("^1[ERROR] Config not found. Make sure config.lua is loaded before client/main.lua^7")
-        return false
-    end
-    
-    -- Check if Config.Stores exists
-    if not Config.Stores then
-        print("^1[ERROR] Config.Stores not found. Make sure config.lua is properly configured.^7")
-        return false
-    end
-    
-    -- Remove existing blips first
-    if currentStoreBlip then
-        RemoveBlip(currentStoreBlip)
-        currentStoreBlip = nil
-    end
-    
-    -- Clear existing NPCs
-    if storeNPCs then
-        for _, npc in pairs(storeNPCs) do
-            if DoesEntityExist(npc.handle) then
-                DeleteEntity(npc.handle)
-            end
-        end
-    end
-    storeNPCs = storeNPCs or {}
-    
-    -- Clear existing zones
-    if storeZones then
-        for _, zone in pairs(storeZones) do
-            if zone and zone.destroy then
-                zone:destroy()
-            end
-        end
-    end
-    storeZones = storeZones or {}
-    
-    local storesCount = 0
-    local npcCount = 0
-    
-    -- Create new blips and NPCs
-    for storeType, storeData in pairs(Config.Stores) do
-        if Config.Debug then
-            print("^3[vein-clothing] Setting up store: " .. storeType .. "^7")
-        end
-        
-        -- Skip if store data is invalid
-        if not storeData or not storeData.locations then
-            print("^1[ERROR] Invalid store data for " .. storeType .. "^7")
-            goto continue
-        end
-        
-        for i, location in ipairs(storeData.locations) do
-            storesCount = storesCount + 1
-            
-            -- Verify location data
-            if not location or not location.x or not location.y or not location.z then
-                print("^1[ERROR] Invalid location data for " .. storeType .. " at index " .. i .. "^7")
-                goto continue_location
-            end
-            
-            -- Create blip
-            local blip = AddBlipForCoord(location.x, location.y, location.z)
-            SetBlipSprite(blip, storeData.blip and storeData.blip.sprite or 73)
-            SetBlipDisplay(blip, 4)
-            SetBlipScale(blip, storeData.blip and storeData.blip.scale or 0.7)
-            SetBlipColour(blip, storeData.blip and storeData.blip.color or 0)
-            SetBlipAsShortRange(blip, true)
-            BeginTextCommandSetBlipName("STRING")
-            AddTextComponentString(storeData.label or "Clothing Store")
-            EndTextCommandSetBlipName(blip)
-            
-            -- Create store clerk NPC
-            local modelName = storeData.clerk and storeData.clerk.model or "a_f_y_business_01"
-            local modelHash = GetHashKey(modelName)
-            
-            if Config.Debug then
-                print("^3[vein-clothing] Attempting to load model: " .. modelName .. " (Hash: " .. modelHash .. ")^7")
-            end
-            
-            -- Request model with proper error handling
-            RequestModel(modelHash)
-            
-            local timeout = 0
-            local modelLoaded = false
-            
-            -- Wait for model to load with timeout
-            while not HasModelLoaded(modelHash) and timeout < 30 do
-                Wait(100)
-                timeout = timeout + 1
-                if Config.Debug and timeout % 10 == 0 then
-                    print("^3[vein-clothing] Still waiting for model to load: " .. modelName .. " (Attempt " .. timeout .. "/30)^7")
-                end
-            end
-            
-            modelLoaded = HasModelLoaded(modelHash)
-            
-            if not modelLoaded then
-                print("^1[ERROR] Failed to load model " .. modelName .. " after 30 attempts. Using fallback model.^7")
-                
-                -- Try fallback model
-                modelName = "a_f_y_business_01"  -- Fallback to a common model
-                modelHash = GetHashKey(modelName)
-                RequestModel(modelHash)
-                
-                timeout = 0
-                while not HasModelLoaded(modelHash) and timeout < 30 do
-                    Wait(100)
-                    timeout = timeout + 1
-                end
-                
-                modelLoaded = HasModelLoaded(modelHash)
-                
-                if not modelLoaded then
-                    print("^1[ERROR] Failed to load fallback model. Skipping NPC creation for this store.^7")
-                    goto continue_location
-                end
-            end
-            
-            if Config.Debug then
-                print("^3[vein-clothing] Model loaded successfully: " .. modelName .. "^7")
-            end
-            
-            -- Safety check for position
-            local safeX, safeY, safeZ = location.x, location.y, location.z - 1.0
-            local safeW = location.w or 0.0
-            
-            local npc = CreatePed(4, modelHash, safeX, safeY, safeZ, safeW, false, true)
-            
-            if DoesEntityExist(npc) then
-                npcCount = npcCount + 1
-                
-                if Config.Debug then
-                    print("^3[vein-clothing] NPC created successfully at location: " .. 
-                        safeX .. ", " .. safeY .. ", " .. safeZ .. "^7")
-                end
-                
-                -- Make sure the NPC is properly configured
-                if not IsEntityDead(npc) then
-                    FreezeEntityPosition(npc, true)
-                    SetEntityInvincible(npc, true)
-                    SetBlockingOfNonTemporaryEvents(npc, true)
-                    
-                    -- Apply animation with a safe default
-                    local scenario = "WORLD_HUMAN_STAND_IMPATIENT"
-                    if storeData.clerk and storeData.clerk.scenario then
-                        scenario = storeData.clerk.scenario
-                    end
-                    
-                    -- Use pcall to handle any scenario errors
-                    local scenarioSuccess = pcall(function()
-                        TaskStartScenarioInPlace(npc, scenario, 0, true)
-                    end)
-                    
-                    if not scenarioSuccess and Config.Debug then
-                        print("^3[WARNING] Failed to start scenario " .. scenario .. " for NPC. Using default.^7")
-                        TaskStartScenarioInPlace(npc, "WORLD_HUMAN_STAND_IMPATIENT", 0, true)
-                    end
-                    
-                    -- Store reference to NPC
-                    table.insert(storeNPCs, {
-                        handle = npc, 
-                        type = storeType, 
-                        index = i,
-                        location = location
-                    })
-                    
-                    -- Add target interaction if enabled
-                    if Config.UseTarget then
-                        if Config.Debug then
-                            print("^3[vein-clothing] Adding qb-target to clerk NPC^7")
-                        end
-                        
-                        if GetResourceState('qb-target') ~= 'missing' then
-                            -- Use pcall to avoid crashing if target export fails
-                            pcall(function()
-                                exports['qb-target']:AddTargetEntity(npc, {
-                                    options = {
-                                        {
-                                            type = "client",
-                                            event = "vein-clothing:client:openStore",
-                                            icon = "fas fa-tshirt",
-                                            label = "Browse " .. (storeData.label or "Clothing Store"),
-                                            args = {
-                                                store = storeType
-                                            }
-                                        }
-                                    },
-                                    distance = Config.PlayerInteraction and Config.PlayerInteraction.MaxDistance or 3.0
-                                })
-                            end)
-                        else
-                            print("^3[WARNING] qb-target not found, disabling targeting for store clerks^7")
-                        end
-                    else
-                        -- Create interaction zone if PolyZone is available
-                        if CircleZone then
-                            -- Use pcall to avoid crashing if zone creation fails
-                            pcall(function() 
-                                local zone = CircleZone.Create(
-                                    vector3(location.x, location.y, location.z), 
-                                    2.0, 
-                                    {
-                                        name = storeType .. "_" .. i,
-                                        debugPoly = Config.Debug,
-                                        useZ = true
-                                    }
-                                )
-                                
-                                zone:onPlayerInOut(function(isPointInside)
-                                    if isPointInside then
-                                        currentStore = storeType
-                                        inStore = true
-                                        QBCore.Functions.Notify("Press [E] to browse " .. (storeData.label or "Clothing Store"), "primary", 5000)
-                                    else
-                                        inStore = false
-                                        currentStore = nil
-                                    end
-                                end)
-                                
-                                table.insert(storeZones, zone)
-                            end)
-                        end
-                    end
-                else
-                    if Config.Debug then
-                        print("^1[ERROR] NPC was created but is dead. Deleting entity.^7")
-                    end
-                    DeleteEntity(npc)
-                end
-            else
-                print("^1[ERROR] Failed to create NPC at location " .. 
-                    safeX .. ", " .. safeY .. ", " .. safeZ .. "^7")
-            end
-            
-            -- Free model regardless of success
-            SetModelAsNoLongerNeeded(modelHash)
-            
-            ::continue_location::
-        end
-        
-        ::continue::
-    end
-    
-    if Config.Debug then
-        print("^3[vein-clothing] Successfully loaded " .. npcCount .. " store NPCs out of " .. storesCount .. " configured locations^7")
-    end
-    
-    return true
-end
-
--- Load laundromat locations
-function LoadLaundromats()
-    if Config.Debug then
-        print("^3[vein-clothing] Loading laundromats...^7")
-    end
-    
-    -- Check if Config.Laundromats exists
-    if not Config.Laundromats then
-        print("^1[ERROR] Config.Laundromats not found. Make sure config.lua is properly configured.^7")
-        return false
-    end
-    
-    for i, location in ipairs(Config.Laundromats) do
-        -- Skip if location data is invalid
-        if not location or not location.coords then
-            print("^1[ERROR] Invalid laundromat data at index " .. i .. "^7")
-            goto continue
-        end
-        
-        -- Create blip
-        local blip = AddBlipForCoord(location.coords.x, location.coords.y, location.coords.z)
-        local blipData = location.blip or {}
-        SetBlipSprite(blip, blipData.sprite or 73)
-        SetBlipDisplay(blip, 4)
-        SetBlipScale(blip, blipData.scale or 0.7)
-        SetBlipColour(blip, blipData.color or 3)
-        SetBlipAsShortRange(blip, true)
-        BeginTextCommandSetBlipName("STRING")
-        AddTextComponentString(blipData.label or "Laundromat")
-        EndTextCommandSetBlipName(blip)
-        
-        -- Create laundromat NPC
-        local model = GetHashKey("s_f_y_shop_mid")
-        RequestModel(model)
-        
-        local timeout = 0
-        while not HasModelLoaded(model) and timeout < 50 do
-            Wait(100)
-            timeout = timeout + 1
-        end
-        
-        if not HasModelLoaded(model) then
-            print("^1[ERROR] Failed to load model for laundromat at index " .. i .. "^7")
-            goto continue
-        end
-        
-        local npc = CreatePed(4, model, location.coords.x, location.coords.y, location.coords.z - 1.0, location.coords.w or 0.0, false, true)
-        
-        if not DoesEntityExist(npc) then
-            print("^1[ERROR] Failed to create ped for laundromat at index " .. i .. "^7")
-            goto continue
-        end
-        
-        FreezeEntityPosition(npc, true)
-        SetEntityInvincible(npc, true)
-        SetBlockingOfNonTemporaryEvents(npc, true)
-        TaskStartScenarioInPlace(npc, "WORLD_HUMAN_STAND_IMPATIENT", 0, true)
-        
-        table.insert(storeNPCs, {
-            handle = npc, 
-            type = "laundromat", 
-            index = i,
-            location = location.coords
-        })
-        
-        -- Add target interaction
-        if Config.UseTarget then
-            if GetResourceState('qb-target') ~= 'missing' then
-                exports['qb-target']:AddTargetEntity(npc, {
-                    options = {
-                        {
-                            type = "client",
-                            event = "vein-clothing:client:openLaundromat",
-                            icon = "fas fa-soap",
-                            label = "Use Laundromat"
-                        }
-                    },
-                    distance = Config.PlayerInteraction and Config.PlayerInteraction.MaxDistance or 3.0
-                })
-            else
-                print("^3[WARNING] qb-target not found, disabling targeting for laundromat NPCs^7")
-            end
-        else
-            -- Create interaction zone
-            if CircleZone then
-                local zone = CircleZone:Create(
-                    vector3(location.coords.x, location.coords.y, location.coords.z), 
-                    2.0, 
-                    {
-                        name = "laundromat_" .. i,
-                        debugPoly = Config.Debug,
-                        useZ = true
-                    }
-                )
-                
-                zone:onPlayerInOut(function(isPointInside)
-                    if isPointInside then
-                        isInLaundromat = true
-                        QBCore.Functions.Notify("Press [E] to use the laundromat", "primary", 5000)
-                    else
-                        isInLaundromat = false
-                    end
-                end)
-                
-                table.insert(storeZones, zone)
-            end
-        end
-        
-        SetModelAsNoLongerNeeded(model)
-        
-        ::continue::
-    end
-    
-    if Config.Debug then
-        local count = 0
-        for _, npc in pairs(storeNPCs) do
-            if npc.type == "laundromat" then
-                count = count + 1
-            end
-        end
-        print("^3[vein-clothing] Successfully loaded " .. count .. " laundromats^7")
-    end
-    
-    return true
-end
-
--- Load tailor shop locations
-function LoadTailors()
-    if Config.Debug then
-        print("^3[vein-clothing] Loading tailors...^7")
-    end
-    
-    -- Check if Config.Tailors exists
-    if not Config.Tailors then
-        print("^1[ERROR] Config.Tailors not found. Make sure config.lua is properly configured.^7")
-        return false
-    end
-    
-    for i, location in ipairs(Config.Tailors) do
-        -- Skip if location data is invalid
-        if not location or not location.coords then
-            print("^1[ERROR] Invalid tailor data at index " .. i .. "^7")
-            goto continue
-        end
-        
-        -- Create blip
-        local blip = AddBlipForCoord(location.coords.x, location.coords.y, location.coords.z)
-        local blipData = location.blip or {}
-        SetBlipSprite(blip, blipData.sprite or 73)
-        SetBlipDisplay(blip, 4)
-        SetBlipScale(blip, blipData.scale or 0.7)
-        SetBlipColour(blip, blipData.color or 4)
-        SetBlipAsShortRange(blip, true)
-        BeginTextCommandSetBlipName("STRING")
-        AddTextComponentString(blipData.label or "Tailor Shop")
-        EndTextCommandSetBlipName(blip)
-        
-        -- Create tailor NPC
-        local model = GetHashKey("s_m_m_tailor_01")
-        RequestModel(model)
-        
-        local timeout = 0
-        while not HasModelLoaded(model) and timeout < 50 do
-            Wait(100)
-            timeout = timeout + 1
-        end
-        
-        if not HasModelLoaded(model) then
-            print("^1[ERROR] Failed to load model for tailor at index " .. i .. "^7")
-            goto continue
-        end
-        
-        local npc = CreatePed(4, model, location.coords.x, location.coords.y, location.coords.z - 1.0, location.coords.w or 0.0, false, true)
-        
-        if not DoesEntityExist(npc) then
-            print("^1[ERROR] Failed to create ped for tailor at index " .. i .. "^7")
-            goto continue
-        end
-        
-        FreezeEntityPosition(npc, true)
-        SetEntityInvincible(npc, true)
-        SetBlockingOfNonTemporaryEvents(npc, true)
-        TaskStartScenarioInPlace(npc, "WORLD_HUMAN_STAND_IMPATIENT", 0, true)
-        
-        table.insert(storeNPCs, {
-            handle = npc, 
-            type = "tailor", 
-            index = i,
-            location = location.coords
-        })
-        
-        -- Add target interaction
-        if Config.UseTarget then
-            if GetResourceState('qb-target') ~= 'missing' then
-                exports['qb-target']:AddTargetEntity(npc, {
-                    options = {
-                        {
-                            type = "client",
-                            event = "vein-clothing:client:openTailor",
-                            icon = "fas fa-cut",
-                            label = "Use Tailor Services"
-                        }
-                    },
-                    distance = Config.PlayerInteraction and Config.PlayerInteraction.MaxDistance or 3.0
-                })
-            else
-                print("^3[WARNING] qb-target not found, disabling targeting for tailor NPCs^7")
-            end
-        else
-            -- Create interaction zone
-            if CircleZone then
-                local zone = CircleZone:Create(
-                    vector3(location.coords.x, location.coords.y, location.coords.z), 
-                    2.0, 
-                    {
-                        name = "tailor_" .. i,
-                        debugPoly = Config.Debug,
-                        useZ = true
-                    }
-                )
-                
-                zone:onPlayerInOut(function(isPointInside)
-                    if isPointInside then
-                        isInTailor = true
-                        QBCore.Functions.Notify("Press [E] to use tailor services", "primary", 5000)
-                    else
-                        isInTailor = false
-                    end
-                end)
-                
-                table.insert(storeZones, zone)
-            end
-        end
-        
-        SetModelAsNoLongerNeeded(model)
-        
-        ::continue::
-    end
-    
-    if Config.Debug then
-        local count = 0
-        for _, npc in pairs(storeNPCs) do
-            if npc.type == "tailor" then
-                count = count + 1
-            end
-        end
-        print("^3[vein-clothing] Successfully loaded " .. count .. " tailors^7")
-    end
-    
-    return true
-end
-
--- Monitor the condition of clothing items and provide notifications
-function StartConditionMonitoring()
-    CreateThread(function()
-        while true do
-            Wait(60000) -- Check every minute
-            
-            -- Check worn items condition
-            for _, item in pairs(currentOutfit) do
-                if item.metadata and item.metadata.condition then
-                    local condition = item.metadata.condition
-                    
-                    -- Notify player if any item is in poor condition
-                    if condition <= 25 and condition > 10 then
-                        QBCore.Functions.Notify(Lang:t('condition.poor', {item = item.label}), 'primary')
-                    elseif condition <= 10 then
-                        QBCore.Functions.Notify(Lang:t('condition.terrible', {item = item.label}), 'error')
-                    end
-                end
-            end
-        end
-    end)
-end
-
--- Remove a specific clothing item
-function RemoveClothing(itemName)
-    -- Find the category of the item
-    local item = QBCore.Shared.Items[itemName]
-    if not item or not item.client or not item.client.category then
-        QBCore.Functions.Notify(Lang:t('error.item_not_wearable'), 'error')
-        return false
-    end
-    
-    local category = item.client.category
-    local componentInfo = clothingComponents[category]
-    
-    if not componentInfo then
-        QBCore.Functions.Notify(Lang:t('error.unknown_category', {category = category}), 'error')
-        return false
-    end
-    
-    -- Remove the item from current outfit
-    for i, outfitItem in pairs(currentOutfit) do
-        if outfitItem.name == itemName then
-            table.remove(currentOutfit, i)
-            break
-        end
-    end
-    
-    -- Reset the specific component
-    if componentInfo.prop then
-        ClearPedProp(SafePlayerPedId(), componentInfo.component)
-    else
-        SetPedComponentVariation(SafePlayerPedId(), componentInfo.component, 0, 0, 2)
-    end
-    
-    return true
-end
-
--- Apply a specific clothing item
-function ApplyClothing(itemName, variation)
-    -- Find the item in the shared items list
-    local item = QBCore.Shared.Items[itemName]
-    if not item or not item.client or not item.client.category then
-        QBCore.Functions.Notify(Lang:t('error.item_not_wearable'), 'error')
-        return false
-    end
-    
-    local category = item.client.category
-    local componentInfo = clothingComponents[category]
-    
-    if not componentInfo then
-        QBCore.Functions.Notify(Lang:t('error.unknown_category', {category = category}), 'error')
-        return false
-    end
-    
-    -- Get item variation data
-    local variations = item.client.variations or {}
-    local selectedVariation = variations[variation] or variations[1] or {drawable = 0, texture = 0}
-    
-    -- Apply the clothing item
-    if componentInfo.prop then
-        SetPedPropIndex(
-            SafePlayerPedId(),
-            componentInfo.component,
-            selectedVariation.drawable or 0,
-            selectedVariation.texture or 0,
-            true
-        )
-    else
-        SetPedComponentVariation(
-            SafePlayerPedId(),
-            componentInfo.component,
-            selectedVariation.drawable or 0,
-            selectedVariation.texture or 0,
-            2
-        )
-    end
-    
-    return true
-end
-
--- Reset player appearance to default
-function ResetAppearance()
-    local playerPed = SafePlayerPedId()
-    
-    -- Clear all props
-    ClearAllPedProps(playerPed)
-    
-    -- Reset all components to default
-    for category, componentInfo in pairs(clothingComponents) do
-        if not componentInfo.prop then
-            SetPedComponentVariation(playerPed, componentInfo.component, 0, 0, 2)
-        end
-    end
-    
-    -- Reset current outfit
-    currentOutfit = {}
-end
-
--- Preview a clothing item without adding it to inventory
-function PreviewClothing(itemName, variation)
-    -- Store current outfit for restoration later
-    local previousOutfit = currentOutfit
-    
-    -- Apply the clothing item for preview
-    local success = ApplyClothing(itemName, variation or 0)
-    
-    -- Start camera preview
-    if not isPreviewing and success then
-        StartPreviewCamera()
-        isPreviewing = true
-        
-        -- Set a timeout to restore previous outfit
-        CreateThread(function()
-            local startTime = GetGameTimer()
-            local previewDuration = 30000 -- 30 seconds
-            
-            while GetGameTimer() - startTime < previewDuration and isPreviewing do
-                Wait(0)
-                
-                -- Show help text
-                DisplayHelpTextThisFrame("preview_controls", false)
-                
-                -- Check for input to cancel preview
-                if IsControlJustPressed(0, 194) then -- Backspace
-                    break
-                end
-                
-                -- Rotate player with keys
-                if IsControlPressed(0, 108) then -- Numpad 4 (rotate left)
-                    SetEntityHeading(playerPed, GetEntityHeading(playerPed) + 1.0)
-                elseif IsControlPressed(0, 107) then -- Numpad 6 (rotate right)
-                    SetEntityHeading(playerPed, GetEntityHeading(playerPed) - 1.0)
-                end
-            end
-            
-            -- Restore previous outfit
-            WearOutfit(previousOutfit)
-            StopPreviewCamera()
-            isPreviewing = false
-        end)
-    end
-    
-    return success
-end
-
--- Start camera for clothing preview
-function StartPreviewCamera()
-    local playerPed = SafePlayerPedId()
-    if not playerPed or playerPed == 0 then return end
-    
-    local coords = GetEntityCoords(playerPed)
-    if not coords then return end
-    
-    -- Create a camera in front of the player
-    previewCam = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
-    
-    local offset = GetOffsetFromEntityInWorldCoords(playerPed, 0.0, 2.0, 0.0)
-    SetCamCoord(previewCam, offset.x, offset.y, coords.z)
-    PointCamAtCoord(previewCam, coords.x, coords.y, coords.z)
-    
-    SetCamActive(previewCam, true)
-    RenderScriptCams(true, false, 0, true, false)
-    
-    -- Disable movement
-    DisableControlActions(true)
-end
-
--- Stop camera preview
-function StopPreviewCamera()
-    local playerPed = SafePlayerPedId()
-    
-    -- Transition back to game camera
-    RenderScriptCams(false, false, 0, true, false)
-    
-    -- Destroy camera
-    if previewCam then
-        DestroyCam(previewCam, false)
-        previewCam = nil
-    end
-    
-    -- Enable movement (only if we have a valid ped)
-    if playerPed and playerPed > 0 then
-        DisableControlActions(false)
-    end
-end
-
--- Helper function to disable control actions
-function DisableControlActions(disable)
-    -- Store the state in a variable that can be accessed from the thread
-    previewControlsDisabled = disable
-    
-    if disable then
-        CreateThread(function()
-            while previewControlsDisabled do
-                DisableControlAction(0, 30, true) -- Movement
-                DisableControlAction(0, 31, true) -- Movement
-                DisableControlAction(0, 32, true) -- W
-                DisableControlAction(0, 33, true) -- S
-                DisableControlAction(0, 34, true) -- A
-                DisableControlAction(0, 35, true) -- D
-                DisableControlAction(0, 36, true) -- Crouch
-                DisableControlAction(0, 44, true) -- Cover
-                Wait(0)
-                
-                -- Safety check in case the thread runs too long
-                if not previewControlsDisabled then
-                    break
-                end
-            end
-        end)
-    end
-end
-
--- Main thread for input handling
-CreateThread(function()
-    while true do
-        Wait(0)
-        
-        -- Store interaction
-        if isInClothingStore and IsControlJustPressed(0, 38) then -- E key
-            OpenClothingStore(currentStore)
-        end
-        
-        -- Laundromat interaction
-        if isInLaundromat and IsControlJustPressed(0, 38) then
-            OpenLaundromat()
-        end
-        
-        -- Tailor interaction
-        if isInTailor and IsControlJustPressed(0, 38) then
-            OpenTailor()
-        end
-    end
-end)
-
--- Opens the clothing store UI
-function OpenClothingStore(storeType)
-    if not Config.Stores[storeType] then
-        QBCore.Functions.Notify(Lang:t('error.store_not_found'), 'error')
-        return
-    end
-    
-    local storeData = Config.Stores[storeType]
-    
-    if Config.Debug then
-        print("^3[vein-clothing] Opening store: " .. storeType .. "^7")
-        print("^3[vein-clothing] Store data: ^7")
-        for k, v in pairs(storeData) do
-            if type(v) ~= "table" then
-                print("  " .. k .. ": " .. tostring(v))
-            else
-                print("  " .. k .. ": table")
-            end
-        end
-    end
-    
-    -- Get store inventory from server
-    QBCore.Functions.TriggerCallback('vein-clothing:server:getStoreInventory', function(inventory)
-        if not inventory then
-            QBCore.Functions.Notify(Lang:t('error.store_inventory_error'), 'error')
-            return
-        end
-        
-        if Config.Debug then
-            print("^3[vein-clothing] Got inventory with " .. #inventory .. " items^7")
-        end
-        
-        -- Get player's clothing and outfits for wardrobe tab
-        QBCore.Functions.TriggerCallback('vein-clothing:server:getPlayerClothing', function(clothing, outfits, wishlist)
-            if Config.Debug then
-                print("^3[vein-clothing] Opening UI^7")
-            end
-            
-            -- Open the UI with the correct format matching the nui.js expectations
-            SetNuiFocus(true, true)
-            SendNUIMessage({
-                type = "show",
-                inStore = true,
-                inLaundromat = false,
-                inTailor = false,
-                store = storeData,
-                money = PlayerData.money and PlayerData.money.cash or 0,
-                storeItems = inventory,
-                wardrobeItems = clothing or {},
-                wishlistItems = wishlist or {},
-                outfits = outfits or {}
-            })
-        end)
-    end, storeType)
-end
-
--- Opens the laundromat UI
-function OpenLaundromat()
-    -- Get player's dirty clothing
-    QBCore.Functions.TriggerCallback('vein-clothing:server:getDirtyClothing', function(dirtyClothing)
-        if not dirtyClothing or #dirtyClothing == 0 then
-            QBCore.Functions.Notify(Lang:t('info.no_dirty_clothing'), 'primary')
-            return
-        end
-        
-        -- Open the UI
-        SendNUIMessage({
-            action = "openLaundromat",
-            clothes = dirtyClothing,
-            price = Config.LaundryPrice
-        })
-        
-        SetNuiFocus(true, true)
-    end)
-end
-
--- Opens the tailor UI
-function OpenTailor()
-    -- Get player's damaged clothing
-    QBCore.Functions.TriggerCallback('vein-clothing:server:getDamagedClothing', function(damagedClothing)
-        if not damagedClothing or #damagedClothing == 0 then
-            QBCore.Functions.Notify(Lang:t('info.no_damaged_clothing'), 'primary')
-            return
-        end
-        
-        -- Open the UI
-        SendNUIMessage({
-            action = "openTailor",
-            clothes = damagedClothing,
-            price = Config.RepairPrice
-        })
-        
-        SetNuiFocus(true, true)
-    end)
-end
-
--- Export functions 
-exports('openWardrobe', function()
-    -- Get player's clothing and outfits
-    QBCore.Functions.TriggerCallback('vein-clothing:server:getPlayerClothing', function(clothing, outfits, wishlist)
-        SendNUIMessage({
-            action = "openWardrobe",
-            data = {
-                clothing = clothing,
-                outfits = outfits,
-                wishlist = wishlist,
-                currentOutfit = currentOutfit
-            }
-        })
-        
-        SetNuiFocus(true, true)
-        isInWardrobe = true
-    end)
-end)
-
-exports('wearOutfit', WearOutfit)
-exports('previewClothing', PreviewClothing)
-exports('resetAppearance', ResetAppearance)
-
 -- Initialize everything when resource starts
 AddEventHandler('onClientResourceStart', function(resourceName)
     if GetCurrentResourceName() ~= resourceName then return end
@@ -2149,6 +1684,23 @@ AddEventHandler('onClientResourceStart', function(resourceName)
     Citizen.CreateThread(function()
         -- Wait longer to ensure all script functions are fully defined
         Citizen.Wait(5000)
+        
+        -- Make sure our critical functions are defined
+        if type(LoadStores) ~= "function" then
+            print("^1[ERROR] LoadStores function is not defined at initialization!^7")
+        end
+        
+        if type(LoadLaundromats) ~= "function" then
+            print("^1[ERROR] LoadLaundromats function is not defined at initialization!^7")
+        end
+        
+        if type(LoadTailors) ~= "function" then
+            print("^1[ERROR] LoadTailors function is not defined at initialization!^7")
+        end
+        
+        if type(LoadPlayerOutfit) ~= "function" then
+            print("^1[ERROR] LoadPlayerOutfit function is not defined at initialization!^7")
+        end
         
         print("^2[vein-clothing] Starting core initialization process...^7")
         Initialize()

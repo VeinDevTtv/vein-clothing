@@ -13,6 +13,7 @@ shared_scripts {
 }
 
 client_scripts {
+    'client/PolyzoneHelper.lua',
     'client/events.lua',
     'client/nui.lua',
     'client/main.lua'
