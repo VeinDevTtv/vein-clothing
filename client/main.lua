@@ -43,7 +43,7 @@ local function SafePlayerPedId()
     local attempts = 0
     
     -- Try multiple times to get a valid ped ID
-    while (not ped or ped == 0) and attempts < 10 do
+    while (not ped or ped == 0) and attempts < 30 do -- Increased from 10 to 30 attempts
         Citizen.Wait(100)
         ped = PlayerPedId()
         attempts = attempts + 1
@@ -59,7 +59,22 @@ local function SafePlayerPedId()
         print("^1[ERROR] Failed to get a valid PlayerPedId after " .. attempts .. " attempts^7")
     end
     
-    return ped or 0  -- Return 0 as fallback if ped is still nil
+    -- Return fallback if still invalid
+    if not ped or ped == 0 then
+        print("^1[ERROR] Player ped ID is still invalid after " .. attempts .. " attempts. Using fallback.^7")
+        -- If all else fails, try one more approach that might work on some systems
+        local playerId = PlayerId()
+        if playerId then
+            ped = GetPlayerPed(playerId)
+        end
+        
+        -- If still invalid, return 0 as absolute fallback
+        if not ped or ped == 0 then
+            ped = 0
+        end
+    end
+    
+    return ped
 end
 
 -- Add this near the top of the file, after QBCore initialization
@@ -763,14 +778,51 @@ Citizen.CreateThread(function()
     
     -- Try to get CircleZone from the exports
     local success, result = pcall(function()
-        return exports[GetCurrentResourceName()]:CreateSafeCircleZone()
+        -- Get the function reference first
+        local createFunc = exports[GetCurrentResourceName()]:CreateSafeCircleZone
+        
+        -- Try calling it with test parameters to validate it works
+        local testZone = createFunc(vector3(0, 0, 0), 1.0, {name = "test_zone"})
+        
+        -- Clean up test zone if it was created
+        if testZone and type(testZone.destroy) == "function" then
+            testZone:destroy()
+        end
+        
+        -- Return the function for future use
+        return createFunc
     end)
     
-    if success and result then
+    if success and result and type(result) == "function" then
         -- We got the function, create a compatible interface
         CircleZone = {
             Create = function(coords, radius, options)
-                return result(coords, radius, options)
+                -- Validate parameters
+                if not coords or type(coords) ~= "vector3" then
+                    print("^1[ERROR] Invalid coords in CircleZone.Create^7")
+                    coords = vector3(0, 0, 0)
+                end
+                
+                if not radius or type(radius) ~= "number" or radius <= 0 then
+                    print("^1[ERROR] Invalid radius in CircleZone.Create^7")
+                    radius = 1.0
+                end
+                
+                if not options then options = {} end
+                
+                -- Call the function with validated parameters
+                local zone = result(coords, radius, options)
+                
+                -- If zone creation failed, return a mock
+                if not zone or type(zone) ~= "table" then
+                    print("^1[ERROR] Zone creation failed in CircleZone.Create^7")
+                    return {
+                        destroy = function() return true end,
+                        onPlayerInOut = function(cb) return {} end
+                    }
+                end
+                
+                return zone
             end
         }
         print("^2[vein-clothing] Successfully got CircleZone from helper^7")
@@ -1556,6 +1608,9 @@ function Initialize()
     -- Print debug message for initialization start
     print("^2[vein-clothing] Starting initialization process...^7")
     
+    -- Safety check to ensure we're not running too early
+    Citizen.Wait(1000) -- Wait 1 second before even attempting initialization
+    
     -- Wait for QBCore to be fully initialized
     local qbCoreAttempts = 0
     while not QBCore do
@@ -1636,10 +1691,25 @@ function Initialize()
         return Config.Items or Config -- Return the clothing configuration
     end)
     
+    -- Check if player ped exists before continuing
+    local playerPed = SafePlayerPedId()
+    if playerPed == 0 then
+        print("^1[ERROR] Player ped is invalid during initialization. Delaying store loading.^7")
+        -- Will continue with longer delay below
+    end
+    
     -- Give the resource more time to fully initialize before loading stores
     Citizen.CreateThread(function()
         -- Add a longer delay to ensure all resources and functions are loaded
-        Citizen.Wait(3000)
+        local initDelay = 5000 -- Increased from 3000 to 5000 ms
+        print("^3[vein-clothing] Waiting " .. initDelay/1000 .. " seconds before loading world objects...^7")
+        Citizen.Wait(initDelay)
+        
+        -- Verify player ped again
+        local playerPed = SafePlayerPedId()
+        if playerPed == 0 then
+            print("^1[ERROR] Player ped is still invalid after delay. World objects may not load correctly.^7")
+        end
         
         print("^2[vein-clothing] Initialization delay complete, setting up world objects now...^7")
         
@@ -1680,6 +1750,9 @@ function Initialize()
             print("^1[vein-clothing] ERROR: Failed to load tailors. Continuing with partial initialization.^7")
         end
         
+        -- Delay outfit loading even more to ensure ped is fully loaded
+        Citizen.Wait(2000)
+        
         print("^3[vein-clothing] Loading player outfit...^7")
         local outfitLoaded = false
         
@@ -1698,8 +1771,12 @@ function Initialize()
         
         -- Safely start condition monitoring with error handling
         pcall(function()
-            StartConditionMonitoring()
-            monitoringStarted = true
+            if type(StartConditionMonitoring) == "function" then
+                StartConditionMonitoring()
+                monitoringStarted = true
+            else
+                print("^3[vein-clothing] StartConditionMonitoring function not found. Skipping.^7")
+            end
         end)
         
         if not monitoringStarted then
