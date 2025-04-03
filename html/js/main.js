@@ -240,6 +240,10 @@ const app = new Vue({
             this.selectedRarity = this.selectedRarity === rarity ? null : rarity;
         },
         
+        setSortBy(sortOption) {
+            this.sortBy = sortOption;
+        },
+        
         selectVariation(itemName, variationIndex) {
             this.$set(this.selectedVariations, itemName, variationIndex);
         },

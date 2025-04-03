@@ -194,59 +194,64 @@ function GetCircleZone()
     return CircleZone
 end
 
--- Create a circle zone with automatic fallback
+-- Create a safe CircleZone that handles errors gracefully
 function CreateSafeCircleZone(coords, radius, options)
-    -- Validate input parameters
-    if not coords then
-        print("^3[WARNING] Nil coords in CreateSafeCircleZone. Using fallback coords.^7")
+    -- Validate and sanitize coordinates
+    if not coords or not AreValidCoords(coords.x, coords.y, coords.z) then
+        print("^3[WARNING] Invalid coords in CreateSafeCircleZone. Using fallback coords.^7")
         coords = vector3(0.0, 0.0, 0.0)
-    elseif type(coords) ~= "vector3" then
-        -- Try to convert to vector3 if it's a table with x,y,z
-        if type(coords) == "table" and coords.x and coords.y and coords.z then
-            coords = vector3(coords.x, coords.y, coords.z)
-        else
-            print("^3[WARNING] Invalid coords in CreateSafeCircleZone. Using fallback coords.^7")
-            coords = vector3(0.0, 0.0, 0.0)
-        end
     end
     
-    -- Ensure radius is a number
-    if not radius or type(radius) ~= "number" then
+    -- Validate and sanitize radius
+    if not radius or radius <= 0 then
         print("^3[WARNING] Invalid radius in CreateSafeCircleZone. Using fallback radius.^7")
-        radius = 1.0
-    elseif radius <= 0 then
-        print("^3[WARNING] Radius must be positive in CreateSafeCircleZone. Using fallback radius.^7")
-        radius = 1.0
+        radius = 3.0 -- Default radius
     end
     
-    -- Ensure options is a table
-    if not options then options = {} end
-    if type(options) ~= "table" then
-        print("^3[WARNING] Invalid options in CreateSafeCircleZone. Using empty options.^7")
-        options = {}
-    end
+    -- Validate options
+    options = options or {}
     
-    -- Get the zone API and handle potential errors
-    local zoneAPI = GetCircleZone()
-    if not zoneAPI or not zoneAPI.Create then
-        print("^1[ERROR] Failed to get CircleZone API. Using local implementation.^7")
-        return CreateLocalCircleZone(coords, radius, options)
-    end
+    -- Extract coordinates as numbers
+    local x, y, z = coords.x, coords.y, coords.z
     
-    -- Safely create the zone
-    local zone
-    local success, result = pcall(function()
-        return zoneAPI.Create(coords, radius, options)
+    -- Use pcall to safely create the zone
+    local success, zone = pcall(function()
+        if CircleZone.new then
+            return CircleZone.new(coords, radius, options)
+        elseif CircleZone then
+            return CircleZone(coords, radius, options)
+        else
+            return nil
+        end
     end)
     
-    if success and result then
-        zone = result
-    else
-        print("^1[ERROR] Failed to create zone: " .. tostring(result) .. ". Using local implementation.^7")
-        zone = CreateLocalCircleZone(coords, radius, options)
+    if success and zone then
+        return zone
     end
     
-    return zone
+    print("^3[WARNING] Failed to create CircleZone: " .. tostring(success) .. ". Using local implementation.^7")
+    
+    -- Fallback local implementation
+    return {
+        position = coords,
+        radius = radius,
+        options = options,
+        isPointInside = function(self, point)
+            if not point then return false end
+            local distance = #(point - self.position)
+            return distance <= self.radius
+        end,
+        destroy = function(self)
+            -- Nothing to do in this implementation
+        end
+    }
+end
+
+-- Helper function to check if coordinates are valid
+function AreValidCoords(x, y, z)
+    -- Check if all values are numbers and not all zeros
+    return type(x) == "number" and type(y) == "number" and type(z) == "number" and
+           not (x == 0 and y == 0 and z == 0) -- Not all zeros
 end
 
 -- Export the function with more robust error handling

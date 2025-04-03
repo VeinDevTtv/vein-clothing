@@ -2179,14 +2179,28 @@ end)
 
 -- Safe version of Vector3 that checks for null values
 function SafeVector3(x, y, z)
-    -- Check for nil or NaN values and provide defaults
-    if x == nil or y == nil or z == nil or 
-       type(x) ~= "number" or type(y) ~= "number" or type(z) ~= "number" or
-       x ~= x or y ~= y or z ~= z then -- NaN check
-        print("^1[ERROR] Invalid vector3 coordinates. Using default values.^7")
+    -- First, ensure the values are numbers and handle nil cases
+    x = tonumber(x) or 0.0
+    y = tonumber(y) or 0.0
+    z = tonumber(z) or 0.0
+    
+    -- Check for NaN values
+    if x ~= x or y ~= y or z ~= z then
+        print("^1[ERROR] Vector3 contains NaN values. Using default (0,0,0).^7")
         return vector3(0.0, 0.0, 0.0)
     end
-    return vector3(x, y, z)
+    
+    -- Use pcall to safely create the vector
+    local success, result = pcall(function()
+        return vector3(x, y, z)
+    end)
+    
+    if not success then
+        print("^1[ERROR] Failed to create vector3: " .. tostring(result) .. ". Using default (0,0,0).^7")
+        return vector3(0.0, 0.0, 0.0)
+    end
+    
+    return result
 end
 
 -- Safe version of PlayerPedId that ensures it returns a valid entity
@@ -2217,4 +2231,11 @@ function GetSafePlayerPosition()
     end
     
     return result
+end
+
+-- Check coordinate validity for a position
+function AreValidCoords(x, y, z)
+    -- Check if all values are numbers and not zero at the same time
+    return type(x) == "number" and type(y) == "number" and type(z) == "number" and
+           (x ~= 0 or y ~= 0 or z ~= 0) -- At least one coordinate should be non-zero
 end

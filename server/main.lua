@@ -224,9 +224,49 @@ function RegisterCallbacks()
         for _, itemName in ipairs(storeData.inventory or {}) do
             local item = QBCore.Shared.Items[itemName]
             
-            if item and item.client then
+            if item then
+                -- Create default client data if missing
+                if not item.client then
+                    print("^3[DEBUG-SERVER] Item " .. itemName .. " has no client data, creating default^7")
+                    local categoryMap = {
+                        ["suit"] = "shirts",
+                        ["dress"] = "shirts",
+                        ["shoes"] = "shoes",
+                        ["watch"] = "accessories",
+                        ["glasses"] = "glasses",
+                        ["hat"] = "hats",
+                        ["mask"] = "masks",
+                        ["pants"] = "pants"
+                    }
+                    
+                    -- Determine category based on item name
+                    local category = "shirts" -- Default category
+                    for keyword, cat in pairs(categoryMap) do
+                        if string.find(string.lower(itemName), keyword) then
+                            category = cat
+                            break
+                        end
+                    end
+                    
+                    -- Create default client data
+                    item.client = {
+                        category = category,
+                        rarity = "common",
+                        gender = "unisex",
+                        variations = {
+                            {
+                                name = "Default",
+                                color = "#333333"
+                            }
+                        },
+                        images = {}
+                    }
+                    
+                    print("^3[DEBUG-SERVER] Created default client data with category: " .. category .. "^7")
+                end
+                
                 -- Skip if gender-specific and doesn't match player gender
-                if item.client.gender and item.client.gender ~= gender then
+                if item.client.gender and item.client.gender ~= gender and item.client.gender ~= "unisex" then
                     print("^3[DEBUG-SERVER] Skipping item " .. itemName .. " due to gender mismatch^7")
                     goto continue
                 end
@@ -234,6 +274,24 @@ function RegisterCallbacks()
                 -- Calculate price
                 local basePrice = item.price or 100
                 local rarity = item.client.rarity or "common"
+                
+                -- Ensure Config.Rarity exists and has the specific rarity
+                if not Config.Rarity then
+                    print("^1[ERROR-SERVER] Config.Rarity is missing, creating default^7")
+                    Config.Rarity = {
+                        ["common"] = { priceMultiplier = 1.0, maxStock = 10, minRestock = 1, maxRestock = 5 },
+                        ["uncommon"] = { priceMultiplier = 1.5, maxStock = 8, minRestock = 1, maxRestock = 3 },
+                        ["rare"] = { priceMultiplier = 2.0, maxStock = 5, minRestock = 1, maxRestock = 2 },
+                        ["exclusive"] = { priceMultiplier = 3.0, maxStock = 3, minRestock = 0, maxRestock = 1 },
+                        ["limited"] = { priceMultiplier = 5.0, maxStock = 1, minRestock = 0, maxRestock = 1 }
+                    }
+                end
+                
+                if not Config.Rarity[rarity] then
+                    print("^1[ERROR-SERVER] Rarity " .. rarity .. " not found in Config.Rarity, using common^7")
+                    rarity = "common"
+                end
+                
                 local rarityMultiplier = (Config.Rarity[rarity] and Config.Rarity[rarity].priceMultiplier) or 1.0
                 local storeMultiplier = storeData.priceMultiplier or 1.0
                 local price = math.floor(basePrice * rarityMultiplier * storeMultiplier)
@@ -242,6 +300,20 @@ function RegisterCallbacks()
                 local stock = 10 -- Default stock
                 if StoreStock[storeName] and StoreStock[storeName][itemName] then
                     stock = StoreStock[storeName][itemName].stock
+                else
+                    -- Create default stock entry if missing
+                    if not StoreStock[storeName] then
+                        StoreStock[storeName] = {}
+                    end
+                    
+                    StoreStock[storeName][itemName] = {
+                        stock = stock,
+                        maxStock = 10,
+                        rarity = rarity,
+                        lastRestock = os.time()
+                    }
+                    
+                    print("^3[DEBUG-SERVER] Created default stock entry for " .. itemName .. "^7")
                 end
                 
                 -- Skip if out of stock
@@ -253,16 +325,16 @@ function RegisterCallbacks()
                 -- Add to store items list
                 table.insert(storeItems, {
                     name = itemName,
-                    label = item.label,
+                    label = item.label or itemName,
                     price = price,
                     stock = stock,
                     rarity = rarity,
                     category = item.client.category or "unknown",
-                    description = item.description or "",
+                    description = item.description or "A stylish clothing item.",
                     component = item.client.component,
                     drawable = item.client.drawable,
                     texture = item.client.texture,
-                    variations = item.client.variations,
+                    variations = item.client.variations or {{ name = "Default", color = "#333333" }},
                     gender = item.client.gender or "unisex",
                     images = item.client.images or {}
                 })
@@ -271,11 +343,7 @@ function RegisterCallbacks()
                 
                 ::continue::
             else
-                if not item then
-                    print("^1[ERROR-SERVER] Item " .. itemName .. " not found in QBCore.Shared.Items^7")
-                elseif not item.client then
-                    print("^1[ERROR-SERVER] Item " .. itemName .. " has no client data^7")
-                end
+                print("^1[ERROR-SERVER] Item " .. itemName .. " not found in QBCore.Shared.Items^7")
             end
         end
         
