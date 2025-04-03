@@ -159,21 +159,26 @@ end
 -- Create store blips on the map - defined early
 function LoadStores()
     -- Debug log
-    if Config and Config.Debug then
-        print("^3[vein-clothing] LoadStores function called^7")
-    end
+    print("^2[DEBUG-STORES] LoadStores function called^7")
     
     -- Check if Config is loaded
     if not Config then
-        print("^1[ERROR] Config not found in LoadStores. Make sure config.lua is loaded before client/main.lua^7")
+        print("^1[DEBUG-STORES] ERROR: Config not found in LoadStores. Make sure config.lua is loaded before client/main.lua^7")
         return false
     end
     
     -- Check if Config.Stores exists
     if not Config.Stores then
-        print("^1[ERROR] Config.Stores not found in LoadStores. Make sure config.lua is properly configured.^7")
+        print("^1[DEBUG-STORES] ERROR: Config.Stores not found in LoadStores. Make sure config.lua is properly configured.^7")
         return false
     end
+    
+    -- Additional debug info
+    local storesList = ""
+    for k, _ in pairs(Config.Stores) do
+        storesList = storesList .. k .. ", "
+    end
+    print("^2[DEBUG-STORES] Found stores: " .. storesList .. "^7")
     
     -- Remove existing blips first
     if currentStoreBlip then
@@ -206,24 +211,26 @@ function LoadStores()
     
     -- Create new blips and NPCs
     for storeType, storeData in pairs(Config.Stores) do
-        if Config and Config.Debug then
-            print("^3[vein-clothing] Setting up store: " .. storeType .. "^7")
-        end
+        print("^2[DEBUG-STORES] Setting up store: " .. storeType .. "^7")
         
         -- Skip if store data is invalid
         if not storeData or not storeData.locations then
-            print("^1[ERROR] Invalid store data for " .. storeType .. "^7")
+            print("^1[DEBUG-STORES] ERROR: Invalid store data for " .. storeType .. "^7")
             goto continue
         end
+        
+        print("^2[DEBUG-STORES] Store " .. storeType .. " has " .. #storeData.locations .. " locations^7")
         
         for i, location in ipairs(storeData.locations) do
             storesCount = storesCount + 1
             
             -- Verify location data
             if not location or not location.x or not location.y or not location.z then
-                print("^1[ERROR] Invalid location data for " .. storeType .. " at index " .. i .. "^7")
+                print("^1[DEBUG-STORES] ERROR: Invalid location data for " .. storeType .. " at index " .. i .. "^7")
                 goto continue_location
             end
+            
+            print("^2[DEBUG-STORES] Creating blip at " .. location.x .. ", " .. location.y .. ", " .. location.z .. "^7")
             
             -- Create blip
             local blip = AddBlipForCoord(location.x, location.y, location.z)
@@ -236,13 +243,13 @@ function LoadStores()
             AddTextComponentString(storeData.label or "Clothing Store")
             EndTextCommandSetBlipName(blip)
             
+            print("^2[DEBUG-STORES] Blip created with sprite " .. (storeData.blip and storeData.blip.sprite or 73) .. "^7")
+            
             -- Create store clerk NPC
-            local modelName = storeData.clerk and storeData.clerk.model or "a_f_y_business_01"
+            local modelName = storeData.clerk and storeData.clerk.model or "s_f_y_shop_mid"
             local modelHash = GetHashKey(modelName)
             
-            if Config and Config.Debug then
-                print("^3[vein-clothing] Attempting to load model: " .. modelName .. " (Hash: " .. modelHash .. ")^7")
-            end
+            print("^2[DEBUG-STORES] Attempting to load model: " .. modelName .. " (Hash: " .. modelHash .. ")^7")
             
             -- Request model with proper error handling
             RequestModel(modelHash)
@@ -254,18 +261,18 @@ function LoadStores()
             while not HasModelLoaded(modelHash) and timeout < 30 do
                 Wait(100)
                 timeout = timeout + 1
-                if Config and Config.Debug and timeout % 10 == 0 then
-                    print("^3[vein-clothing] Still waiting for model to load: " .. modelName .. " (Attempt " .. timeout .. "/30)^7")
+                if timeout % 10 == 0 then
+                    print("^3[DEBUG-STORES] Still waiting for model to load: " .. modelName .. " (Attempt " .. timeout .. "/30)^7")
                 end
             end
             
             modelLoaded = HasModelLoaded(modelHash)
             
             if not modelLoaded then
-                print("^1[ERROR] Failed to load model " .. modelName .. " after 30 attempts. Using fallback model.^7")
+                print("^1[DEBUG-STORES] ERROR: Failed to load model " .. modelName .. " after 30 attempts. Using fallback model.^7")
                 
                 -- Try fallback model
-                modelName = "a_f_y_business_01"  -- Fallback to a common model
+                modelName = "s_f_y_shop_mid"  -- Use a different fallback model
                 modelHash = GetHashKey(modelName)
                 RequestModel(modelHash)
                 
@@ -278,28 +285,25 @@ function LoadStores()
                 modelLoaded = HasModelLoaded(modelHash)
                 
                 if not modelLoaded then
-                    print("^1[ERROR] Failed to load fallback model. Skipping NPC creation for this store.^7")
+                    print("^1[DEBUG-STORES] ERROR: Failed to load fallback model. Skipping NPC creation for this store.^7")
                     goto continue_location
                 end
             end
             
-            if Config and Config.Debug then
-                print("^3[vein-clothing] Model loaded successfully: " .. modelName .. "^7")
-            end
+            print("^2[DEBUG-STORES] Model loaded successfully: " .. modelName .. "^7")
             
             -- Safety check for position
             local safeX, safeY, safeZ = location.x, location.y, location.z - 1.0
             local safeW = location.w or 0.0
+            
+            print("^2[DEBUG-STORES] Creating NPC at: " .. safeX .. ", " .. safeY .. ", " .. safeZ .. "^7")
             
             local npc = CreatePed(4, modelHash, safeX, safeY, safeZ, safeW, false, true)
             
             if DoesEntityExist(npc) then
                 npcCount = npcCount + 1
                 
-                if Config and Config.Debug then
-                    print("^3[vein-clothing] NPC created successfully at location: " .. 
-                        safeX .. ", " .. safeY .. ", " .. safeZ .. "^7")
-                end
+                print("^2[DEBUG-STORES] NPC created successfully with ID: " .. npc .. "^7")
                 
                 -- Make sure the NPC is properly configured
                 if not IsEntityDead(npc) then
@@ -313,13 +317,15 @@ function LoadStores()
                         scenario = storeData.clerk.scenario
                     end
                     
+                    print("^2[DEBUG-STORES] Setting scenario: " .. scenario .. " for NPC^7")
+                    
                     -- Use pcall to handle any scenario errors
                     local scenarioSuccess = pcall(function()
                         TaskStartScenarioInPlace(npc, scenario, 0, true)
                     end)
                     
-                    if not scenarioSuccess and Config and Config.Debug then
-                        print("^3[WARNING] Failed to start scenario " .. scenario .. " for NPC. Using default.^7")
+                    if not scenarioSuccess then
+                        print("^3[DEBUG-STORES] WARNING: Failed to start scenario " .. scenario .. " for NPC. Using default.^7")
                         TaskStartScenarioInPlace(npc, "WORLD_HUMAN_STAND_IMPATIENT", 0, true)
                     end
                     
@@ -333,13 +339,11 @@ function LoadStores()
                     
                     -- Add target interaction if enabled
                     if Config and Config.UseTarget then
-                        if Config and Config.Debug then
-                            print("^3[vein-clothing] Adding qb-target to clerk NPC^7")
-                        end
+                        print("^2[DEBUG-STORES] Adding qb-target to clerk NPC^7")
                         
                         if GetResourceState('qb-target') ~= 'missing' then
                             -- Use pcall to avoid crashing if target export fails
-                            pcall(function()
+                            local targetSuccess = pcall(function()
                                 exports['qb-target']:AddTargetEntity(npc, {
                                     options = {
                                         {
@@ -352,49 +356,58 @@ function LoadStores()
                                             }
                                         }
                                     },
-                                    distance = Config and Config.PlayerInteraction and Config.PlayerInteraction.MaxDistance or 3.0
+                                    distance = Config.PlayerInteraction and Config.PlayerInteraction.MaxDistance or 3.0
                                 })
                             end)
+                            
+                            if not targetSuccess then
+                                print("^1[DEBUG-STORES] ERROR: Failed to add qb-target to NPC^7")
+                            end
                         else
-                            print("^3[WARNING] qb-target not found, disabling targeting for store clerks^7")
+                            print("^3[DEBUG-STORES] WARNING: qb-target not found, disabling targeting for store NPCs^7")
                         end
                     elseif CircleZone then
-                        -- Create interaction zone if CircleZone is available and not using qb-target
-                        -- Use pcall to avoid crashing if zone creation fails
-                        pcall(function() 
-                            local zone = CircleZone.Create(
+                        -- Create interaction zone
+                        print("^2[DEBUG-STORES] Creating CircleZone for store^7")
+                        
+                        local zoneSuccess, zone = pcall(function()
+                            return CircleZone.Create(
                                 vector3(location.x, location.y, location.z), 
                                 2.0, 
                                 {
-                                    name = storeType .. "_" .. i,
+                                    name = "store_" .. storeType .. "_" .. i,
                                     debugPoly = Config and Config.Debug,
                                     useZ = true
                                 }
                             )
+                        end)
+                        
+                        if zoneSuccess and zone then
+                            print("^2[DEBUG-STORES] CircleZone created successfully^7")
                             
                             zone:onPlayerInOut(function(isPointInside)
                                 if isPointInside then
+                                    isInsideStore = true
                                     currentStore = storeType
-                                    inStore = true
-                                    QBCore.Functions.Notify("Press [E] to browse " .. (storeData.label or "Clothing Store"), "primary", 5000)
+                                    QBCore.Functions.Notify("Press [E] to browse " .. storeData.label, "primary", 5000)
                                 else
-                                    inStore = false
-                                    currentStore = nil
+                                    if currentStore == storeType then
+                                        isInsideStore = false
+                                        currentStore = nil
+                                    end
                                 end
                             end)
                             
                             table.insert(storeZones, zone)
-                        end)
+                        else
+                            print("^1[DEBUG-STORES] ERROR: Failed to create CircleZone^7")
+                        end
                     end
                 else
-                    if Config and Config.Debug then
-                        print("^1[ERROR] NPC was created but is dead. Deleting entity.^7")
-                    end
-                    DeleteEntity(npc)
+                    print("^1[DEBUG-STORES] ERROR: NPC created but is dead^7")
                 end
             else
-                print("^1[ERROR] Failed to create NPC at location " .. 
-                    safeX .. ", " .. safeY .. ", " .. safeZ .. "^7")
+                print("^1[DEBUG-STORES] ERROR: Failed to create NPC^7")
             end
             
             -- Free model regardless of success
@@ -406,12 +419,17 @@ function LoadStores()
         ::continue::
     end
     
-    if Config and Config.Debug then
-        print("^3[vein-clothing] Successfully loaded " .. npcCount .. " store NPCs out of " .. storesCount .. " configured locations^7")
-    end
+    print("^2[DEBUG-STORES] Successfully loaded " .. npcCount .. " store NPCs out of " .. storesCount .. " configured locations^7")
     
     return true
 end
+
+-- Debug command to force reload stores
+RegisterCommand('reloadstores', function()
+    print("^2[DEBUG-STORES] Manually triggering store reload...^7")
+    LoadStores()
+    print("^2[DEBUG-STORES] Store reload complete^7")
+end, false)
 
 -- Load laundromat locations - defined early
 function LoadLaundromats()
