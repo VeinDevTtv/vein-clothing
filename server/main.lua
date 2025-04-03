@@ -429,21 +429,37 @@ function RegisterCallbacks()
                 if not Config.Rarity then
                     print("^1[ERROR-SERVER] Config.Rarity is missing, creating default^7")
                     Config.Rarity = {
-                        ["common"] = { priceMultiplier = 1.0, maxStock = 10, minRestock = 1, maxRestock = 5 },
-                        ["uncommon"] = { priceMultiplier = 1.5, maxStock = 8, minRestock = 1, maxRestock = 3 },
-                        ["rare"] = { priceMultiplier = 2.0, maxStock = 5, minRestock = 1, maxRestock = 2 },
-                        ["exclusive"] = { priceMultiplier = 3.0, maxStock = 3, minRestock = 0, maxRestock = 1 },
-                        ["limited"] = { priceMultiplier = 5.0, maxStock = 1, minRestock = 0, maxRestock = 1 }
+                        common = { priceMultiplier = 1.0, maxStock = 15 },
+                        uncommon = { priceMultiplier = 1.5, maxStock = 10 },
+                        rare = { priceMultiplier = 2.0, maxStock = 7 },
+                        epic = { priceMultiplier = 3.0, maxStock = 5 },
+                        legendary = { priceMultiplier = 5.0, maxStock = 3 }
                     }
                 end
                 
+                -- Ensure this specific rarity exists
                 if not Config.Rarity[rarity] then
-                    print("^1[ERROR-SERVER] Rarity " .. rarity .. " not found in Config.Rarity, using common^7")
-                    rarity = "common"
+                    print("^1[ERROR-SERVER] Missing rarity config for " .. rarity .. ", creating default entry^7")
+                    Config.Rarity[rarity] = { priceMultiplier = 1.0, maxStock = 10 }
                 end
                 
-                local rarityMultiplier = (Config.Rarity[rarity] and Config.Rarity[rarity].priceMultiplier) or 1.0
-                local storeMultiplier = storeData.priceMultiplier or 1.0
+                -- Ensure rarity has priceMultiplier
+                if not Config.Rarity[rarity].priceMultiplier then
+                    print("^1[ERROR-SERVER] Missing priceMultiplier for rarity " .. rarity .. ", setting default^7")
+                    Config.Rarity[rarity].priceMultiplier = 1.0
+                end
+                
+                -- Log the rarity for debugging
+                print("^3[DEBUG-RARITY] Item: " .. itemName .. " has rarity: " .. rarity .. " with multiplier: " .. tostring(Config.Rarity[rarity].priceMultiplier) .. "^7")
+                
+                local rarityMultiplier = Config.Rarity[rarity].priceMultiplier
+                local storeMultiplier = 1.0
+                
+                -- Apply store multiplier if available
+                if storeType and Config.Stores and Config.Stores[storeType] and Config.Stores[storeType].priceMultiplier then
+                    storeMultiplier = Config.Stores[storeType].priceMultiplier
+                end
+                
                 local price = math.floor(basePrice * rarityMultiplier * storeMultiplier)
                 
                 -- Get stock info
@@ -1102,11 +1118,18 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
     -- Debug output
     print("^2[DEBUG-SERVER] Purchase attempt for " .. itemName .. " using payment method: " .. (paymentMethod or "cash") .. "^7")
     
+    -- Make sure the item exists and is registered correctly
     local item = QBCore.Shared.Items[itemName]
     
     if not item then
         print("^1[ERROR-SERVER] Item not found in QBCore.Shared.Items: " .. itemName .. "^7")
-        return false, "Item not found"
+        -- Try to register the item dynamically if it's in Config.VanillaClothes
+        if RegisterMissingItem(itemName) then
+            item = QBCore.Shared.Items[itemName]
+            print("^3[WARNING-SERVER] Item registered dynamically: " .. itemName .. "^7")
+        else
+            return false, "Item not found"
+        end
     end
     
     -- Special debug for necklace items
@@ -1127,32 +1150,18 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
         
         -- Force correct component for necklaces
         item.client.component = 7 -- 7 is for necklaces
-        print("^3[NECKLACE-DEBUG] Set component to 7 (necklace)^7")
+        item.client.category = "accessories"
+        item.client.drawable = item.client.drawable or 0
+        item.client.texture = item.client.texture or 0
         
-        -- Ensure drawable and texture
-        if not item.client.drawable then
-            item.client.drawable = 0
-            print("^3[NECKLACE-DEBUG] Fixed missing drawable, set to 0^7")
-        end
-        
-        if not item.client.texture then
-            item.client.texture = 0
-            print("^3[NECKLACE-DEBUG] Fixed missing texture, set to 0^7")
-        end
-        
-        -- Ensure category is set
-        if not item.client.category then
-            item.client.category = "accessories"
-            print("^3[NECKLACE-DEBUG] Fixed missing category, set to accessories^7")
-        end
+        -- Update the shared item
+        QBCore.Shared.Items[itemName] = item
+        print("^3[NECKLACE-DEBUG] Updated shared item definition for: " .. itemName .. "^7")
     end
     
     -- Verify the item has all required client data
-    if not item.client or not item.client.component or not item.client.drawable or not item.client.texture then
+    if not item.client or not item.client.component then
         print("^1[ERROR-SERVER] Item missing required client data: " .. itemName .. "^7")
-        print("^1[ERROR-SERVER] component: " .. tostring(item.client and item.client.component) .. 
-              ", drawable: " .. tostring(item.client and item.client.drawable) .. 
-              ", texture: " .. tostring(item.client and item.client.texture) .. "^7")
         
         -- Attempt to fix missing data
         if not item.client then
@@ -1165,20 +1174,28 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
             local itemNameLower = string.lower(itemName)
             if string.find(itemNameLower, "shirt") or string.find(itemNameLower, "jacket") or string.find(itemNameLower, "top") then
                 item.client.component = 11 -- Upper body
+                item.client.category = "shirts"
             elseif string.find(itemNameLower, "pant") or string.find(itemNameLower, "jean") or string.find(itemNameLower, "short") then
                 item.client.component = 4 -- Legs
+                item.client.category = "pants"
             elseif string.find(itemNameLower, "shoe") or string.find(itemNameLower, "boot") then
                 item.client.component = 6 -- Feet
+                item.client.category = "shoes"
             elseif string.find(itemNameLower, "hat") or string.find(itemNameLower, "cap") then
                 item.client.component = 0 -- Hat
+                item.client.category = "hats"
             elseif string.find(itemNameLower, "glass") then
                 item.client.component = 1 -- Glasses
-            elseif string.find(itemNameLower, "necklace") or string.find(itemNameLower, "chain") then
+                item.client.category = "glasses"
+            elseif string.find(itemNameLower, "necklace") or string.find(itemNameLower, "chain") or string.find(itemNameLower, "pearl") then
                 item.client.component = 7 -- Necklace
+                item.client.category = "accessories"
             elseif string.find(itemNameLower, "watch") or string.find(itemNameLower, "bracelet") then
                 item.client.component = 6 -- Wrist
+                item.client.category = "accessories"
             else
                 item.client.component = 11 -- Default to torso
+                item.client.category = "clothes"
             end
             
             print("^3[WARNING-SERVER] Set component " .. item.client.component .. " for: " .. itemName .. " based on name^7")
@@ -1195,7 +1212,8 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
         end
         
         -- Save the fixes back to QBCore.Shared.Items
-        QBCore.Shared.Items[itemName].client = item.client
+        QBCore.Shared.Items[itemName] = item
+        print("^3[WARNING-SERVER] Updated shared definition for: " .. itemName .. "^7")
     end
     
     -- Calculate price
@@ -1203,13 +1221,33 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
     local rarity = (item.client and item.client.rarity) or "common"
     
     -- Ensure Config.Rarity exists and has valid entries
-    if not Config.Rarity or not Config.Rarity[rarity] or not Config.Rarity[rarity].priceMultiplier then
-        print("^1[ERROR-SERVER] Missing rarity config for " .. rarity .. ", using default multiplier^7")
-        Config.Rarity = Config.Rarity or {}
-        Config.Rarity[rarity] = Config.Rarity[rarity] or { priceMultiplier = 1.0 }
+    if not Config.Rarity then
+        print("^1[ERROR-SERVER] Missing Config.Rarity, creating default configuration^7")
+        Config.Rarity = {
+            common = { priceMultiplier = 1.0, maxStock = 15 },
+            uncommon = { priceMultiplier = 1.5, maxStock = 10 },
+            rare = { priceMultiplier = 2.0, maxStock = 7 },
+            epic = { priceMultiplier = 3.0, maxStock = 5 },
+            legendary = { priceMultiplier = 5.0, maxStock = 3 }
+        }
     end
     
-    local rarityMultiplier = Config.Rarity[rarity].priceMultiplier or 1.0
+    -- Ensure this specific rarity exists
+    if not Config.Rarity[rarity] then
+        print("^1[ERROR-SERVER] Missing rarity config for " .. rarity .. ", creating default entry^7")
+        Config.Rarity[rarity] = { priceMultiplier = 1.0, maxStock = 10 }
+    end
+    
+    -- Ensure rarity has priceMultiplier
+    if not Config.Rarity[rarity].priceMultiplier then
+        print("^1[ERROR-SERVER] Missing priceMultiplier for rarity " .. rarity .. ", setting default^7")
+        Config.Rarity[rarity].priceMultiplier = 1.0
+    end
+    
+    -- Log the rarity for debugging
+    print("^3[DEBUG-RARITY] Item: " .. itemName .. " has rarity: " .. rarity .. " with multiplier: " .. tostring(Config.Rarity[rarity].priceMultiplier) .. "^7")
+    
+    local rarityMultiplier = Config.Rarity[rarity].priceMultiplier
     local storeMultiplier = 1.0
     
     -- Apply store multiplier if available
@@ -1255,19 +1293,27 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
         category = item.client.category or "clothes"
     }
     
-    -- Try several methods to add the item to inventory
-    local added = false
+    -- Make sure our item is usable first
+    print("^3[ITEM-DEBUG] Ensuring item is usable: " .. itemName .. "^7")
     
-    -- Method 1: Try with Core.Functions.CreateUsableItem to re-register it
+    -- Re-register the usable item before adding it
     QBCore.Functions.CreateUseableItem(itemName, function(source, item)
         local src = source
+        if not src or src == 0 then return end
+        
+        local Player = QBCore.Functions.GetPlayer(src)
+        if not Player then return end
+        
         local info = item.info or {}
-        if not info.component then
+        -- Always use shared item data for consistency
+        if QBCore.Shared.Items[itemName] and QBCore.Shared.Items[itemName].client then
             info.component = QBCore.Shared.Items[itemName].client.component
             info.drawable = QBCore.Shared.Items[itemName].client.drawable
             info.texture = QBCore.Shared.Items[itemName].client.texture
-            info.category = QBCore.Shared.Items[itemName].client.category or "clothes"
+            info.category = QBCore.Shared.Items[itemName].client.category
         end
+        
+        print("^3[ITEM-DEBUG] Using item: " .. itemName .. " with component: " .. tostring(info.component) .. "^7")
         
         if info.component == 0 or info.component == 1 or info.component == 2 or
            info.component == 6 or info.component == 7 then
@@ -1279,27 +1325,36 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
         end
     end)
     
-    -- Method 2: Try direct add with Player.Functions.AddItem
+    -- Try several methods to add the item to inventory
+    local added = false
+    
+    -- Method 1: Standard QB-Core method
+    print("^3[ITEM-DEBUG] Attempting to add item using standard method: " .. itemName .. "^7")
     added = Player.Functions.AddItem(itemName, 1, nil, info)
     
-    -- Method 3: If direct add fails, try qb-inventory export
+    -- Method 2: If direct add fails, try qb-inventory export
     if not added and exports['qb-inventory'] then
-        added = exports['qb-inventory']:AddItem(src, itemName, 1, nil, info)
+        print("^3[ITEM-DEBUG] Standard method failed, trying qb-inventory export for: " .. itemName .. "^7")
+        local result = exports['qb-inventory']:AddItem(src, itemName, 1, nil, info)
+        added = (result ~= false and result ~= nil)
     end
     
-    -- Method 4: Fallback to HandleInventory method
+    -- Method 3: Fallback to HandleInventory method
     if not added then
+        print("^3[ITEM-DEBUG] Export method failed, trying HandleInventory for: " .. itemName .. "^7")
         added = HandleInventory('addItem', src, itemName, 1, info)
     end
     
-    -- Method 5: Last resort, try with no info
+    -- Method 4: Last resort, try with no info
     if not added then
+        print("^3[ITEM-DEBUG] All standard methods failed, trying without metadata for: " .. itemName .. "^7")
         added = Player.Functions.AddItem(itemName, 1)
     end
     
+    -- Final check to see if we successfully added the item
     if not added then
         -- Refund the player if the item couldn't be added
-        print("^1[ERROR-SERVER] Failed to add item to inventory: " .. itemName .. "^7")
+        print("^1[ERROR-SERVER] FAILED TO ADD ITEM TO INVENTORY: " .. itemName .. "^7")
         Player.Functions.AddMoney(moneyType, price)
         return false, "Inventory full or item invalid"
     end
@@ -1327,7 +1382,7 @@ function PurchaseItem(source, itemName, storeType, paymentMethod)
     end
     
     -- Log the transaction
-    print("^2[vein-clothing] Player " .. Player.PlayerData.citizenid .. " purchased " .. itemName .. " for $" .. price .. " using " .. moneyType .. "^7")
+    print("^2[SUCCESS] Player " .. Player.PlayerData.citizenid .. " purchased " .. itemName .. " for $" .. price .. " using " .. moneyType .. "^7")
     
     -- Refresh player inventory
     TriggerClientEvent('inventory:client:ItemBox', source, QBCore.Shared.Items[itemName], "add")
@@ -1337,6 +1392,80 @@ end
 
 -- Expose functions for export
 exports('purchaseItem', PurchaseItem)
+
+-- Helper function to register a missing item by finding it in the vanilla clothes config
+function RegisterMissingItem(itemName)
+    print("^3[ITEM-RECOVERY] Attempting to register missing item: " .. itemName .. "^7")
+    
+    -- Try to find the item in the vanilla clothes configs
+    local foundItem = nil
+    local gender = nil
+    
+    -- Check male items
+    if Config.VanillaClothes and Config.VanillaClothes.Male and Config.VanillaClothes.Male[itemName] then
+        foundItem = Config.VanillaClothes.Male[itemName]
+        gender = "male"
+    end
+    
+    -- Check female items
+    if not foundItem and Config.VanillaClothes and Config.VanillaClothes.Female and Config.VanillaClothes.Female[itemName] then
+        foundItem = Config.VanillaClothes.Female[itemName]
+        gender = "female"
+    end
+    
+    if foundItem then
+        print("^3[ITEM-RECOVERY] Found item in " .. gender .. " vanilla clothes config: " .. itemName .. "^7")
+        -- Register the item using our shared item registration function
+        if RegisterSharedItem(itemName, foundItem.label, foundItem.description, foundItem.weight or 0.1) then
+            print("^2[ITEM-RECOVERY] Successfully registered missing item: " .. itemName .. "^7")
+            return true
+        end
+    else
+        print("^1[ITEM-RECOVERY] Could not find item in vanilla clothes config: " .. itemName .. "^7")
+        
+        -- Last resort: Create a generic clothing item with a guessed component
+        local itemNameLower = string.lower(itemName)
+        local component = 11 -- Default to torso
+        local category = "clothes"
+        
+        if string.find(itemNameLower, "necklace") or string.find(itemNameLower, "chain") or string.find(itemNameLower, "pearl") then
+            component = 7
+            category = "accessories"
+        elseif string.find(itemNameLower, "watch") or string.find(itemNameLower, "bracelet") then
+            component = 6
+            category = "accessories"
+        elseif string.find(itemNameLower, "hat") or string.find(itemNameLower, "cap") then
+            component = 0
+            category = "hats"
+        elseif string.find(itemNameLower, "glass") then
+            component = 1
+            category = "glasses"
+        elseif string.find(itemNameLower, "pant") or string.find(itemNameLower, "jean") or string.find(itemNameLower, "short") then
+            component = 4
+            category = "pants"
+        elseif string.find(itemNameLower, "shoe") or string.find(itemNameLower, "boot") then
+            component = 6
+            category = "shoes"
+        end
+        
+        -- Create a generic item
+        local label = itemName:gsub("_", " "):gsub("^%l", string.upper)
+        local success = RegisterSharedItem(itemName, label, "A clothing item", 0.1)
+        
+        -- Set the component and category
+        if success and QBCore.Shared.Items[itemName] then
+            QBCore.Shared.Items[itemName].client.component = component
+            QBCore.Shared.Items[itemName].client.category = category
+            QBCore.Shared.Items[itemName].client.drawable = 0
+            QBCore.Shared.Items[itemName].client.texture = 0
+            print("^3[ITEM-RECOVERY] Created generic item " .. itemName .. " with component " .. component .. "^7")
+            return true
+        end
+    end
+    
+    return false
+end
+
 exports('restockStore', function(storeType)
     if not StoreStock[storeType] then
         return false, "Store not found"
@@ -1627,17 +1756,20 @@ end)
 
 -- Main Initialize function - called when resource starts
 AddEventHandler('onResourceStart', function(resourceName)
-    if GetCurrentResourceName() ~= resourceName then return end
-    
-    print("^2[vein-clothing] Initializing clothing system...^7")
-    
-    -- Wait for QB-Core to fully load
-    Wait(1000)
-    
-    -- Initialize the clothing system
-    Initialize()
-    
-    print("^2[vein-clothing] Clothing system initialized successfully!^7")
+    if resourceName == GetCurrentResourceName() then
+        print("^2[vein-clothing] Resource started, initializing...^7")
+        Wait(2000) -- Wait for database and other resources to be ready
+        
+        -- Initialize clothing system
+        Initialize()
+        
+        -- Automatically register vanilla clothes and populate stores
+        print("^2[vein-clothing] Automatically registering vanilla clothes...^7")
+        AddVanillaClothes()
+        
+        -- Start store restock timer
+        StartRestockTimer()
+    end
 end)
 
 -- Handle resource stopping
@@ -2372,34 +2504,95 @@ function AddVanillaClothes()
     RegisterClothingAsUsable()
 end
 
--- Find and fix the RegisterSharedItem function to properly work with qb-inventory
+-- Completely rewrite the RegisterSharedItem function to make it compatible with qb-inventory
 function RegisterSharedItem(name, label, description, weight)
+    if not name then return false end
+    
+    -- Check if item already exists in QBCore.Shared.Items
     if QBCore.Shared.Items[name] then 
-        -- If item exists but doesn't have client data, add it
+        -- But ensure it has client data
         if not QBCore.Shared.Items[name].client then
             QBCore.Shared.Items[name].client = {
                 status = {},
                 attachments = {},
                 image = "clothing.png",
             }
-            print("^3[INFO] Added missing client data to existing item: " .. name)
+            print("^3[DEBUG] Adding missing client data to existing item: " .. name .. "^7")
         end
         
-        return false 
+        -- Make sure component data is set correctly even for existing items
+        local itemNameLower = string.lower(name)
+        
+        -- Add debug for necklace items
+        if string.find(itemNameLower, "necklace") or string.find(itemNameLower, "chain") or string.find(itemNameLower, "pearl") then
+            print("^3[DEBUG] Setting component for necklace item: " .. name .. "^7")
+            QBCore.Shared.Items[name].client.component = 7
+            QBCore.Shared.Items[name].client.category = "accessories"
+        elseif string.find(itemNameLower, "shirt") or string.find(itemNameLower, "jacket") or string.find(itemNameLower, "top") or string.find(itemNameLower, "suit") or string.find(itemNameLower, "blouse") or string.find(itemNameLower, "hoodie") then
+            QBCore.Shared.Items[name].client.component = 11
+            QBCore.Shared.Items[name].client.category = "shirts"
+        elseif string.find(itemNameLower, "pant") or string.find(itemNameLower, "jean") or string.find(itemNameLower, "leg") or string.find(itemNameLower, "short") or string.find(itemNameLower, "skirt") then
+            QBCore.Shared.Items[name].client.component = 4
+            QBCore.Shared.Items[name].client.category = "pants"
+        elseif string.find(itemNameLower, "shoe") or string.find(itemNameLower, "boot") or string.find(itemNameLower, "sneaker") or string.find(itemNameLower, "heel") then
+            QBCore.Shared.Items[name].client.component = 6
+            QBCore.Shared.Items[name].client.category = "shoes"
+        elseif string.find(itemNameLower, "hat") or string.find(itemNameLower, "cap") or string.find(itemNameLower, "helmet") or string.find(itemNameLower, "beanie") then
+            QBCore.Shared.Items[name].client.component = 0
+            QBCore.Shared.Items[name].client.category = "hats"
+        elseif string.find(itemNameLower, "glass") then
+            QBCore.Shared.Items[name].client.component = 1
+            QBCore.Shared.Items[name].client.category = "glasses"
+        elseif string.find(itemNameLower, "watch") or string.find(itemNameLower, "bracelet") then
+            QBCore.Shared.Items[name].client.component = 6
+            QBCore.Shared.Items[name].client.category = "accessories"
+        else
+            QBCore.Shared.Items[name].client.component = 11
+            QBCore.Shared.Items[name].client.category = "clothes"
+        end
+        
+        -- Ensure drawable and texture are set
+        QBCore.Shared.Items[name].client.drawable = QBCore.Shared.Items[name].client.drawable or 0
+        QBCore.Shared.Items[name].client.texture = QBCore.Shared.Items[name].client.texture or 0
+        
+        -- Handle rarity properly
+        if Config.VanillaClothes then
+            local vanillaItem = nil
+            -- Check both male and female items
+            if Config.VanillaClothes.Male and Config.VanillaClothes.Male[name] then
+                vanillaItem = Config.VanillaClothes.Male[name]
+            elseif Config.VanillaClothes.Female and Config.VanillaClothes.Female[name] then
+                vanillaItem = Config.VanillaClothes.Female[name]
+            end
+            
+            -- Set rarity if we found the vanilla item
+            if vanillaItem and vanillaItem.rarity then
+                QBCore.Shared.Items[name].client.rarity = vanillaItem.rarity
+                print("^3[DEBUG] Set rarity for item " .. name .. " to " .. vanillaItem.rarity .. "^7")
+            end
+        end
+        
+        print("^3[DEBUG] Updated existing item: " .. name .. " with component: " .. tostring(QBCore.Shared.Items[name].client.component) .. "^7")
+        return true -- Return true because we've updated the existing item
     end
     
-    -- Create item with proper structure expected by qb-inventory
+    -- Determine proper item properties
+    local itemWeight = weight or 0.1
+    local itemLabel = label or name:gsub("_", " "):gsub("^%l", string.upper)
+    local itemDesc = description or "A clothing item"
+    
+    -- Create base item
     local itemData = {
         name = name,
-        label = label or name:gsub("_", " "):gsub("^%l", string.upper),
-        weight = weight or 0.1,
+        label = itemLabel,
+        weight = itemWeight,
         type = "item",
         image = "clothing.png",
-        unique = false,  -- Changed to false to allow stacking
+        unique = false,
         useable = true,
         shouldClose = true,
         combinable = nil,
-        description = description or "A clothing item",
+        description = itemDesc,
         client = {
             status = {},
             attachments = {},
@@ -2407,61 +2600,84 @@ function RegisterSharedItem(name, label, description, weight)
         }
     }
     
-    -- Actually register the item with QBCore
-    QBCore.Functions.AddItem(name, itemData)
-    QBCore.Shared.Items[name] = itemData
+    -- Set component data based on item name
+    local itemNameLower = string.lower(name)
     
-    -- Tell qb-inventory about it
-    if exports['qb-inventory'] and exports['qb-inventory'].RegisterItem then
-        exports['qb-inventory']:RegisterItem(name, itemData)
+    if string.find(itemNameLower, "necklace") or string.find(itemNameLower, "chain") or string.find(itemNameLower, "pearl") then
+        -- Special handling for necklace items
+        itemData.client.component = 7 -- 7 is for necklaces
+        itemData.client.category = "accessories"
+        print("^3[DEBUG] Created necklace item: " .. name .. " with component 7^7")
+    elseif string.find(itemNameLower, "shirt") or string.find(itemNameLower, "jacket") or string.find(itemNameLower, "top") or string.find(itemNameLower, "suit") or string.find(itemNameLower, "blouse") or string.find(itemNameLower, "hoodie") then
+        itemData.client.component = 11
+        itemData.client.category = "shirts"
+    elseif string.find(itemNameLower, "pant") or string.find(itemNameLower, "jean") or string.find(itemNameLower, "leg") or string.find(itemNameLower, "short") or string.find(itemNameLower, "skirt") then
+        itemData.client.component = 4
+        itemData.client.category = "pants"
+    elseif string.find(itemNameLower, "shoe") or string.find(itemNameLower, "boot") or string.find(itemNameLower, "sneaker") or string.find(itemNameLower, "heel") then
+        itemData.client.component = 6
+        itemData.client.category = "shoes"
+    elseif string.find(itemNameLower, "hat") or string.find(itemNameLower, "cap") or string.find(itemNameLower, "helmet") or string.find(itemNameLower, "beanie") then
+        itemData.client.component = 0
+        itemData.client.category = "hats"
+    elseif string.find(itemNameLower, "glass") then
+        itemData.client.component = 1
+        itemData.client.category = "glasses"
+    elseif string.find(itemNameLower, "watch") or string.find(itemNameLower, "bracelet") then
+        itemData.client.component = 6
+        itemData.client.category = "accessories"
+    else
+        itemData.client.component = 11
+        itemData.client.category = "clothes"
     end
     
-    -- Register the useable function
+    -- Set drawable and texture
+    itemData.client.drawable = 0
+    itemData.client.texture = 0
+    
+    -- Handle rarity - look up in Config.VanillaClothes if available
+    if Config.VanillaClothes then
+        local vanillaItem = nil
+        -- Check both male and female items
+        if Config.VanillaClothes.Male and Config.VanillaClothes.Male[name] then
+            vanillaItem = Config.VanillaClothes.Male[name]
+        elseif Config.VanillaClothes.Female and Config.VanillaClothes.Female[name] then
+            vanillaItem = Config.VanillaClothes.Female[name]
+        end
+        
+        -- Set rarity if we found the vanilla item
+        if vanillaItem and vanillaItem.rarity then
+            itemData.client.rarity = vanillaItem.rarity
+            print("^3[DEBUG] Set rarity for new item " .. name .. " to " .. vanillaItem.rarity .. "^7")
+        else
+            itemData.client.rarity = "common" -- Default rarity
+        end
+    else
+        itemData.client.rarity = "common" -- Default rarity
+    end
+    
+    -- Register the item with QBCore
+    QBCore.Shared.Items[name] = itemData
+    
+    -- Register usable item (wearable)
     QBCore.Functions.CreateUseableItem(name, function(source, item)
         local src = source
-        local Player = QBCore.Functions.GetPlayer(src)
+        if not src or src == 0 then return end
         
+        local Player = QBCore.Functions.GetPlayer(src)
         if not Player then return end
         
         local info = item.info or {}
         
-        -- If info doesn't have component data, use the client data from the shared item
-        if not info.component and QBCore.Shared.Items[name].client then
+        -- Always use the client data from the shared item
+        if QBCore.Shared.Items[name] and QBCore.Shared.Items[name].client then
             info.component = QBCore.Shared.Items[name].client.component
             info.drawable = QBCore.Shared.Items[name].client.drawable
             info.texture = QBCore.Shared.Items[name].client.texture
             info.category = QBCore.Shared.Items[name].client.category
         end
         
-        -- If still no component data, set defaults based on item name
-        if not info.component then
-            if string.find(string.lower(name), "shirt") or string.find(string.lower(name), "jacket") or string.find(string.lower(name), "top") then
-                info.component = 11 -- Upper body
-            elseif string.find(string.lower(name), "pant") or string.find(string.lower(name), "short") or string.find(string.lower(name), "skirt") then
-                info.component = 4 -- Legs
-            elseif string.find(string.lower(name), "shoe") or string.find(string.lower(name), "boot") then
-                info.component = 6 -- Feet
-            elseif string.find(string.lower(name), "hat") or string.find(string.lower(name), "cap") or string.find(string.lower(name), "helmet") then
-                info.component = 0 -- Hat prop
-            elseif string.find(string.lower(name), "glass") or string.find(string.lower(name), "sunglass") then
-                info.component = 1 -- Glasses prop
-            elseif string.find(string.lower(name), "necklace") or string.find(string.lower(name), "chain") then
-                info.component = 7 -- Necklace
-            elseif string.find(string.lower(name), "watch") or string.find(string.lower(name), "bracelet") then
-                info.component = 6 -- Watch/bracelet
-            else
-                info.component = 11 -- Default to upper body
-            end
-            
-            info.drawable = 0
-            info.texture = 0
-            info.category = info.category or "clothes"
-        end
-        
-        -- Log what we're using
-        print("^3[ITEM-USE-DEBUG] Using item: " .. name .. " - Component: " .. (info.component or "nil") .. " - Category: " .. (info.category or "unknown") .. "^7")
-        
-        -- Check if it's a prop or component
+        -- Determine if it's a prop or component
         if info.component == 0 or info.component == 1 or info.component == 2 or
            info.component == 6 or info.component == 7 then
             -- These are props
@@ -2472,6 +2688,25 @@ function RegisterSharedItem(name, label, description, weight)
         end
     end)
     
+    -- Try to register with QB-Inventory as well (for compatibility)
+    if exports['qb-inventory'] then
+        -- Some versions of qb-inventory have AddItem
+        if exports['qb-inventory'].AddItem then
+            exports['qb-inventory']:AddItem(name, itemData)
+        end
+        
+        -- Some versions have RegisterItem
+        if exports['qb-inventory'].RegisterItem then
+            exports['qb-inventory']:RegisterItem(name, itemData)
+        end
+    end
+    
+    -- Some newer versions of QBCore use Callbacks.RegisterItem
+    if QBCore.Callbacks and QBCore.Callbacks.RegisterItem then
+        QBCore.Callbacks.RegisterItem(name, itemData)
+    end
+    
+    print("^2[SUCCESS] Registered new item: " .. name .. " with component: " .. tostring(itemData.client.component) .. "^7")
     return true
 end
 
