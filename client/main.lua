@@ -18,20 +18,45 @@ end
 local mockDestroy = function() end
 local mockOnPlayerInOut = function(cb) end
 
--- Import PolyZone for zone creation
-local CircleZone
-local hasPolyZone = GetResourceState('PolyZone') ~= 'missing'
+-- Mock CircleZone implementation for when PolyZone is not available
+local MockCircleZone = {}
+MockCircleZone.__index = MockCircleZone
 
-if hasPolyZone then
+-- Create a new mock zone
+function MockCircleZone.new(coords, radius, options)
+    local self = setmetatable({}, MockCircleZone)
+    self.coords = coords
+    self.radius = radius
+    self.options = options
+    self.name = options and options.name or "unnamed"
+    return self
+end
+
+-- Dummy destroy method
+function MockCircleZone:destroy()
+    print("^3[DEBUG] Destroying mock zone: " .. self.name .. "^7")
+    -- Nothing to actually destroy in the mock implementation
+end
+
+-- Dummy onPlayerInOut method
+function MockCircleZone:onPlayerInOut(cb)
+    -- Store the callback but we don't actually check player position in this mock
+    self.callback = cb
+end
+
+-- Import PolyZone for zone creation
+local CircleZone = {}
+
+-- Check if PolyZone is available
+if GetResourceState('PolyZone') ~= 'missing' then
+    -- Use the real PolyZone if available
     CircleZone = exports['PolyZone']:CircleZone
 else
+    -- Use our mock implementation
+    print("^3[WARNING] PolyZone not found. Using mock CircleZone implementation.^7")
     CircleZone = {}
-    CircleZone.Create = function(coords, radius, options)
-        local mockZone = {}
-        mockZone.destroy = mockDestroy
-        mockZone.onPlayerInOut = mockOnPlayerInOut
-        return mockZone
-    end
+    -- Override the Create function to use our mock
+    CircleZone.Create = MockCircleZone.new
 end
 
 -- Global variables for the clothing system
