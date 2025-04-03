@@ -40,40 +40,10 @@ local clothingComponents = {
 -- Add this safety function at the top of the file
 local function SafePlayerPedId()
     local ped = PlayerPedId()
-    local attempts = 0
-    
-    -- Try multiple times to get a valid ped ID
-    while (not ped or ped == 0) and attempts < 30 do -- Increased from 10 to 30 attempts
-        Citizen.Wait(100)
-        ped = PlayerPedId()
-        attempts = attempts + 1
-        
-        -- If debugging is enabled, log the attempts
-        if Config and Config.Debug then
-            print("^3[vein-clothing] Attempting to get player ped ID, attempt " .. attempts .. "^7")
-        end
-    end
-    
-    -- Log warning if we couldn't get a valid ped after multiple attempts
-    if (not ped or ped == 0) and Config and Config.Debug then
-        print("^1[ERROR] Failed to get a valid PlayerPedId after " .. attempts .. " attempts^7")
-    end
-    
-    -- Return fallback if still invalid
     if not ped or ped == 0 then
-        print("^1[ERROR] Player ped ID is still invalid after " .. attempts .. " attempts. Using fallback.^7")
-        -- If all else fails, try one more approach that might work on some systems
-        local playerId = PlayerId()
-        if playerId then
-            ped = GetPlayerPed(playerId)
-        end
-        
-        -- If still invalid, return 0 as absolute fallback
-        if not ped or ped == 0 then
-            ped = 0
-        end
+        print("^1[ERROR] Invalid player ped. Using fallback.^7")
+        return -1 -- Return invalid entity ID as fallback
     end
-    
     return ped
 end
 
@@ -1199,6 +1169,15 @@ function OpenClothingStore(storeName)
         playerMoney = playerData.money.cash or 0
     end
     
+    -- First, initialize UI with debug mode setting
+    SendNUIMessage({
+        action = "initialize",
+        debug = Config.Debug or false
+    })
+    
+    -- Wait a small moment for the UI to reset
+    Citizen.Wait(100)
+    
     -- First, reset any existing UI state to ensure it's fresh
     SendNUIMessage({
         action = "hide"
@@ -1209,10 +1188,24 @@ function OpenClothingStore(storeName)
     
     -- Get available clothing items for this store and gender
     QBCore.Functions.TriggerCallback('vein-clothing:server:getStoreItems', function(items, wishlist)
-        if not items then
-            print("^1[ERROR] Failed to load store items from server^7")
+        if items == nil then
+            print("^1[ERROR] Failed to load store items from server - items is nil^7")
             QBCore.Functions.Notify("Failed to load store items", "error")
-            return
+            
+            -- Create a fallback set of items so UI can still function
+            local fallbackItems = {
+                {
+                    name = "fallback_item",
+                    label = "Example Item (Server Error)",
+                    price = 100,
+                    stock = 0,
+                    rarity = "common",
+                    category = "shirts",
+                    description = "Server error loading items. Please try again later.",
+                    gender = gender or "male"
+                }
+            }
+            items = fallbackItems
         end
         
         print("^2[vein-clothing] Received " .. #items .. " items from server, opening UI...^7")
@@ -1234,7 +1227,8 @@ function OpenClothingStore(storeName)
             },
             money = playerMoney,
             storeItems = items,
-            wishlistItems = wishlist or {}
+            wishlistItems = wishlist or {},
+            debug = Config.Debug or false
         })
         
         -- Verify UI state after brief delay
@@ -1253,7 +1247,8 @@ function OpenClothingStore(storeName)
                     },
                     money = playerMoney,
                     storeItems = items,
-                    wishlistItems = wishlist or {}
+                    wishlistItems = wishlist or {},
+                    debug = Config.Debug or false
                 })
             end
         end)
@@ -1400,7 +1395,7 @@ function CloseClothingUI()
     isInClothingStore = false
     inWardrobe = false
     
-    -- Release focus
+    -- Release focus and disable cursor explicitly
     SetNuiFocus(false, false)
     
     -- Make sure to reset the ped rotation
@@ -1417,6 +1412,11 @@ function CloseClothingUI()
     SendNUIMessage({
         action = "hide"
     })
+    
+    -- Force cursor off
+    DisplayHud(true)
+    DisplayRadar(true)
+    TriggerScreenblurFadeOut(400)
     
     print("^2[vein-clothing] UI closed successfully^7")
 end
@@ -2177,29 +2177,26 @@ AddEventHandler('onResourceStart', function(resourceName)
     print("^2[vein-clothing] Resource started, UI state reset^7")
 end)
 
--- Helper function to safely create vector3 objects
+-- Safe version of Vector3 that checks for null values
 function SafeVector3(x, y, z)
-    if not x or not y or not z then
-        print("^1[ERROR] Attempt to create vector3 with nil values. Using fallback coordinates.^7")
+    -- Check for nil or NaN values and provide defaults
+    if x == nil or y == nil or z == nil or 
+       type(x) ~= "number" or type(y) ~= "number" or type(z) ~= "number" or
+       x ~= x or y ~= y or z ~= z then -- NaN check
+        print("^1[ERROR] Invalid vector3 coordinates. Using default values.^7")
         return vector3(0.0, 0.0, 0.0)
     end
-    
-    -- Convert to numbers in case they're strings
-    local nx = tonumber(x) or 0.0
-    local ny = tonumber(y) or 0.0
-    local nz = tonumber(z) or 0.0
-    
-    -- Safely create vector3
-    local success, result = pcall(function()
-        return vector3(nx, ny, nz)
-    end)
-    
-    if not success then
-        print("^1[ERROR] Failed to create vector3: " .. tostring(result) .. ". Using fallback.^7")
-        return vector3(0.0, 0.0, 0.0)
+    return vector3(x, y, z)
+end
+
+-- Safe version of PlayerPedId that ensures it returns a valid entity
+function SafePlayerPedId()
+    local ped = PlayerPedId()
+    if not ped or ped == 0 then
+        print("^1[ERROR] Invalid player ped. Using fallback.^7")
+        return -1 -- Return invalid entity ID as fallback
     end
-    
-    return result
+    return ped
 end
 
 -- Helper function to get the player's position safely

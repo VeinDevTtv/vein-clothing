@@ -3,6 +3,7 @@ const app = new Vue({
     el: '#app',
     data: {
         visible: false,
+        debug: false,
         currentView: 'store',
         inStore: false,
         inLaundromat: false,
@@ -211,9 +212,23 @@ const app = new Vue({
         
         closeUI() {
             this.visible = false;
-            $.post('https://vein-clothing/close', JSON.stringify({}));
+            // Replace jQuery with vanilla JS
+            fetch('https://vein-clothing/close', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json; charset=UTF-8',
+                },
+                body: JSON.stringify({})
+            });
+            
             // Also try the other endpoint for compatibility
-            $.post('https://vein-clothing/closeUI', JSON.stringify({}));
+            fetch('https://vein-clothing/closeUI', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json; charset=UTF-8',
+                },
+                body: JSON.stringify({})
+            });
         },
         
         // Item Management
@@ -239,9 +254,9 @@ const app = new Vue({
             } else {
                 this.wishlistItems.push(item);
             }
-            $.post('https://vein-clothing/toggleWishlist', JSON.stringify({
+            this.postNUI('toggleWishlist', {
                 itemName: item.name
-            }));
+            });
         },
         
         // Outfit Management
@@ -254,9 +269,9 @@ const app = new Vue({
         saveOutfit() {
             if (!this.outfitName) return;
             
-            $.post('https://vein-clothing/saveOutfit', JSON.stringify({
+            this.postNUI('saveOutfit', {
                 name: this.outfitName
-            }));
+            });
             
             this.closeModal();
         },
@@ -271,10 +286,10 @@ const app = new Vue({
         renameOutfit() {
             if (!this.newOutfitName) return;
             
-            $.post('https://vein-clothing/renameOutfit', JSON.stringify({
+            this.postNUI('renameOutfit', {
                 outfitId: this.selectedOutfit.id,
                 newName: this.newOutfitName
-            }));
+            });
             
             this.closeModal();
         },
@@ -286,53 +301,53 @@ const app = new Vue({
         },
         
         deleteOutfit() {
-            $.post('https://vein-clothing/deleteOutfit', JSON.stringify({
+            this.postNUI('deleteOutfit', {
                 outfitId: this.selectedOutfit.id
-            }));
+            });
             
             this.closeModal();
         },
         
         wearOutfit(outfitId) {
-            $.post('https://vein-clothing/wearOutfit', JSON.stringify({
+            this.postNUI('wearOutfit', {
                 outfitId: outfitId
-            }));
+            });
         },
         
         setDefaultOutfit(outfitId) {
-            $.post('https://vein-clothing/setDefaultOutfit', JSON.stringify({
+            this.postNUI('setDefaultOutfit', {
                 outfitId: outfitId
-            }));
+            });
         },
         
         // Item Actions
         previewItem(item) {
-            $.post('https://vein-clothing/previewItem', JSON.stringify({
+            this.postNUI('previewItem', {
                 itemName: item.name,
                 variation: this.selectedVariations[item.name] || 0
-            }));
+            });
         },
         
         purchaseItem(item) {
-            $.post('https://vein-clothing/purchaseItem', JSON.stringify({
+            this.postNUI('purchaseItem', {
                 itemName: item.name,
                 variation: this.selectedVariations[item.name] || 0
-            }));
+            });
         },
         
         wearItem(item) {
-            $.post('https://vein-clothing/wearItem', JSON.stringify({
+            this.postNUI('wearItem', {
                 itemName: item.name,
                 slot: item.slot,
                 variation: item.metadata?.variation || 0
-            }));
+            });
         },
         
         removeItem(item) {
-            $.post('https://vein-clothing/removeItem', JSON.stringify({
+            this.postNUI('removeItem', {
                 itemName: item.name,
                 slot: item.slot
-            }));
+            });
         },
         
         isWorn(itemName) {
@@ -366,11 +381,11 @@ const app = new Vue({
         tradeItem() {
             if (!this.selectedPlayer) return;
             
-            $.post('https://vein-clothing/tradeItem', JSON.stringify({
+            this.postNUI('tradeItem', {
                 itemName: this.selectedItem.name,
                 slot: this.selectedItem.slot,
                 targetPlayer: this.selectedPlayer
-            }));
+            });
             
             this.closeModal();
         },
@@ -378,12 +393,12 @@ const app = new Vue({
         sellItem() {
             if (!this.selectedPlayer || !this.sellPrice) return;
             
-            $.post('https://vein-clothing/sellItem', JSON.stringify({
+            this.postNUI('sellItem', {
                 itemName: this.selectedItem.name,
                 slot: this.selectedItem.slot,
                 targetPlayer: this.selectedPlayer,
                 price: this.sellPrice
-            }));
+            });
             
             this.closeModal();
         },
@@ -418,12 +433,12 @@ const app = new Vue({
         washSelectedItems() {
             if (this.selectedDirtyItems.length === 0) return;
             
-            $.post('https://vein-clothing/washItems', JSON.stringify({
+            this.postNUI('washItems', {
                 items: this.selectedDirtyItems.map(item => ({
                     name: item.name,
                     slot: item.slot
                 }))
-            }));
+            });
             
             this.selectedDirtyItems = [];
         },
@@ -443,12 +458,12 @@ const app = new Vue({
         repairSelectedItems() {
             if (this.selectedDamagedItems.length === 0) return;
             
-            $.post('https://vein-clothing/repairItems', JSON.stringify({
+            this.postNUI('repairItems', {
                 items: this.selectedDamagedItems.map(item => ({
                     name: item.name,
                     slot: item.slot
                 }))
-            }));
+            });
             
             this.selectedDamagedItems = [];
         },
@@ -519,11 +534,22 @@ const app = new Vue({
         
         // Event Handlers
         respondToOffer(accept) {
-            $.post('https://vein-clothing/respondToOffer', JSON.stringify({
+            this.postNUI('respondToOffer', {
                 accept: accept
-            }));
+            });
             
             this.closeModal();
+        },
+        
+        // Helper function to replace $.post
+        postNUI(eventName, data) {
+            fetch(`https://vein-clothing/${eventName}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json; charset=UTF-8',
+                },
+                body: JSON.stringify(data || {})
+            });
         }
     },
     mounted() {
@@ -549,8 +575,15 @@ const app = new Vue({
                 this.dirtyItems = data.dirtyItems || [];
                 this.damagedItems = data.damagedItems || [];
                 this.nearbyPlayers = data.nearbyPlayers || [];
+                this.debug = data.debug || false;
                 this.currentView = this.inStore ? 'store' : (this.inLaundromat ? 'laundry' : (this.inTailor ? 'repair' : 'wardrobe'));
                 console.log('UI visible:', this.visible, 'Current view:', this.currentView);
+                
+                // Handle case where store opened but no items received
+                if (this.inStore && this.storeItems.length === 0) {
+                    console.warn('Store opened but no items received');
+                    this.addNotification('No items available at this store', 'warning');
+                }
             } else if (data.type === "hide") {
                 // New hide format
                 this.visible = false;
@@ -566,6 +599,7 @@ const app = new Vue({
                 this.currentStore = data.store || data.storeData || null;
                 this.playerMoney = data.playerMoney || 0;
                 this.storeItems = data.inventory || [];
+                this.debug = data.debug || false;
                 this.currentView = 'store';
                 console.log('UI visible (legacy format):', this.visible, 'Current view:', this.currentView);
             } else if (data.action === "hide") {

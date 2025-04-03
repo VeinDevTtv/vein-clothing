@@ -199,7 +199,10 @@ function RegisterCallbacks()
         local src = source
         local Player = QBCore.Functions.GetPlayer(src)
         
+        print("^2[DEBUG-SERVER] getStoreItems callback triggered for store: " .. (storeName or "nil") .. ", gender: " .. (gender or "nil") .. "^7")
+        
         if not Player then
+            print("^1[ERROR-SERVER] Player not found in getStoreItems callback^7")
             cb(nil, {})
             return
         end
@@ -208,26 +211,30 @@ function RegisterCallbacks()
         local storeData = Config.Stores[storeName]
         
         if not storeData then
+            print("^1[ERROR-SERVER] Store data not found for: " .. (storeName or "nil") .. "^7")
             cb(nil, {})
             return
         end
         
+        print("^2[DEBUG-SERVER] Store " .. storeName .. " has " .. #(storeData.inventory or {}) .. " items in inventory config^7")
+        
         local storeItems = {}
         
         -- Get items from store inventory
-        for _, itemName in ipairs(storeData.inventory) do
+        for _, itemName in ipairs(storeData.inventory or {}) do
             local item = QBCore.Shared.Items[itemName]
             
             if item and item.client then
                 -- Skip if gender-specific and doesn't match player gender
                 if item.client.gender and item.client.gender ~= gender then
+                    print("^3[DEBUG-SERVER] Skipping item " .. itemName .. " due to gender mismatch^7")
                     goto continue
                 end
                 
                 -- Calculate price
                 local basePrice = item.price or 100
                 local rarity = item.client.rarity or "common"
-                local rarityMultiplier = Config.Rarity[rarity].priceMultiplier or 1.0
+                local rarityMultiplier = (Config.Rarity[rarity] and Config.Rarity[rarity].priceMultiplier) or 1.0
                 local storeMultiplier = storeData.priceMultiplier or 1.0
                 local price = math.floor(basePrice * rarityMultiplier * storeMultiplier)
                 
@@ -239,6 +246,7 @@ function RegisterCallbacks()
                 
                 -- Skip if out of stock
                 if stock <= 0 then
+                    print("^3[DEBUG-SERVER] Skipping item " .. itemName .. " because it's out of stock^7")
                     goto continue
                 end
                 
@@ -259,9 +267,19 @@ function RegisterCallbacks()
                     images = item.client.images or {}
                 })
                 
+                print("^2[DEBUG-SERVER] Added item " .. itemName .. " to store items list^7")
+                
                 ::continue::
+            else
+                if not item then
+                    print("^1[ERROR-SERVER] Item " .. itemName .. " not found in QBCore.Shared.Items^7")
+                elseif not item.client then
+                    print("^1[ERROR-SERVER] Item " .. itemName .. " has no client data^7")
+                end
             end
         end
+        
+        print("^2[DEBUG-SERVER] Returning " .. #storeItems .. " items to client^7")
         
         -- Get player's wishlist
         local wishlist = {}
