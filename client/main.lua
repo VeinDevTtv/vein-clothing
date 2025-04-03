@@ -50,7 +50,7 @@ local CircleZone = {}
 -- Check if PolyZone is available
 if GetResourceState('PolyZone') ~= 'missing' then
     -- Use the real PolyZone if available
-    CircleZone = exports['PolyZone']:CircleZone
+    CircleZone = exports['PolyZone'].CircleZone
 else
     -- Use our mock implementation
     print("^3[WARNING] PolyZone not found. Using mock CircleZone implementation.^7")
